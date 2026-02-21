@@ -16,35 +16,6 @@ from modules.utils import run_cmd, get_video_info
 logger = logging.getLogger(__name__)
 
 
-def _generate_background(
-    ffmpeg: str, bg_path: str | None, w: int, h: int,
-    duration: float, fps: float, output: str,
-):
-    """Генерация фонового слоя: из изображения или серый цвет."""
-    if bg_path and os.path.isfile(bg_path):
-        run_cmd([
-            ffmpeg, "-y",
-            "-loop", "1", "-i", bg_path,
-            "-t", str(duration),
-            "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,"
-                   f"crop={w}:{h}",
-            "-c:v", "libx264", "-preset", "fast",
-            "-pix_fmt", "yuv420p",
-            "-r", str(fps),
-            output,
-        ], "генерация фона из изображения")
-    else:
-        logger.info("Фоновое изображение не задано, используется серый фон")
-        run_cmd([
-            ffmpeg, "-y",
-            "-f", "lavfi",
-            "-i", f"color=c=0x404040:s={w}x{h}:d={duration}:r={fps}",
-            "-c:v", "libx264", "-preset", "fast",
-            "-pix_fmt", "yuv420p",
-            output,
-        ], "генерация серого фона")
-
-
 def process(
     input_path: str,
     output_path: str,
@@ -80,67 +51,47 @@ def process(
     overlay_y = (out_h - scaled_h) // 2 + jitter_y
 
     # Прозрачность шума (0.01–0.03)
-    noise_alpha = cfg.noise_opacity
+    noise_strength = int(cfg.noise_opacity * 255)
 
-    # Фильтр-граф:
-    # [0:v] — фон (подложка)
-    # [1:v] — основное видео
-    # noise — динамическое зерно поверх
-    filter_complex = (
-        # Фон — масштабируем/обрезаем до выходного размера
-        f"color=c=0x404040:s={out_w}x{out_h}:r={fps}[bg];"
-    )
+    # Длительность фона с запасом чтобы overlay не обрезал видео
+    safe_duration = duration + 10
+
+    # --- Сборка filter_complex ---
+    parts = []
 
     if cfg.background_image and os.path.isfile(cfg.background_image):
-        # Используем фоновое изображение вместо цвета
-        filter_complex = (
-            f"[1:v]scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
-            f"crop={out_w}:{out_h}[bg];"
-        )
+        # С фоновым изображением: input0 = видео, input1 = фон
         inputs = [
             "-i", input_path,
             "-loop", "1", "-i", cfg.background_image,
         ]
-        video_input_idx = "0"
-        bg_input_idx = "1"
-    else:
-        inputs = ["-i", input_path]
-        video_input_idx = "0"
-        bg_input_idx = None
-
-    # Строим filter_complex
-    parts = []
-
-    # Длительность с запасом — color source должен быть >= длины видео
-    safe_duration = duration + 10
-
-    if bg_input_idx:
+        video_idx = "0"
         parts.append(
-            f"[{bg_input_idx}:v]scale={out_w}:{out_h}:"
+            f"[1:v]scale={out_w}:{out_h}:"
             f"force_original_aspect_ratio=increase,"
             f"crop={out_w}:{out_h}[bg]"
         )
     else:
+        # Без фонового изображения: серый цвет, input0 = видео
+        inputs = ["-i", input_path]
+        video_idx = "0"
         parts.append(
             f"color=c=0x404040:s={out_w}x{out_h}:r={fps}:d={safe_duration}[bg]"
         )
 
     # Масштабирование основного видео
     parts.append(
-        f"[{video_input_idx}:v]scale={scaled_w}:{scaled_h}:"
+        f"[{video_idx}:v]scale={scaled_w}:{scaled_h}:"
         f"force_original_aspect_ratio=decrease[main]"
     )
 
-    # Наложение основного видео на фон — eof_action=endall завершает
-    # когда заканчивается основное видео (а не фон)
+    # Наложение видео на фон (eof_action=endall — завершить когда видео кончится)
     parts.append(
         f"[bg][main]overlay=x={overlay_x}:y={overlay_y}:"
         f"eof_action=endall[composed]"
     )
 
-    # Генерация динамического шума и наложение с прозрачностью
-    # noise: используем geq для генерации шума с альфа-каналом
-    noise_strength = int(noise_alpha * 255)
+    # Динамический шум поверх
     parts.append(
         f"[composed]noise=c0s={noise_strength}:allf=t[outv]"
     )
@@ -152,7 +103,7 @@ def process(
     cmd.extend([
         "-filter_complex", full_filter,
         "-map", "[outv]",
-        "-map", f"{video_input_idx}:a?",
+        "-map", f"{video_idx}:a?",
         "-c:v", "libx264", "-preset", "fast",
         "-c:a", "aac", "-b:a", "128k",
         "-pix_fmt", "yuv420p",
@@ -161,5 +112,10 @@ def process(
     ])
 
     run_cmd(cmd, "сборка матрёшки")
-    logger.info("Матрёшка собрана: %s", output_path)
+
+    logger.info(
+        "Матрёшка собрана: %dx%d, масштаб %.2f, сдвиг (%+d,%+d), шум %d: %s",
+        out_w, out_h, cfg.video_scale, jitter_x, jitter_y, noise_strength,
+        output_path,
+    )
     return output_path
