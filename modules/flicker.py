@@ -80,7 +80,7 @@ def build_flicker_filters(
 
     Рандомизация:
       Расписание пачек вычисляется заранее в Python (random),
-      а в FFmpeg передаётся как серия between(n,start,end).
+      а в FFmpeg передаётся как серия between(N,start,end).
     """
     schedule = _generate_burst_schedule(duration, fps, cfg)
 
@@ -89,8 +89,9 @@ def build_flicker_filters(
         return f"{input_label}null{output_label}"
 
     # --- Условие: «мы внутри какой-либо пачки» ---
-    # Собираем OR из between(n,start,end) — n это номер кадра
-    conditions = [f"between(n\\,{s}\\,{e})" for s, e in schedule]
+    # В geq переменные с большой буквы: N = номер кадра, T = время
+    # Собираем OR из between(N,start,end)
+    conditions = [f"between(N,{s},{e})" for s, e in schedule]
     is_dark_expr = "+".join(conditions)
 
     # --- Alpha с sin-модуляцией ---
@@ -105,7 +106,8 @@ def build_flicker_filters(
     alpha_expr = f"{alpha_mid:.3f}+{alpha_amp:.3f}*sin(2*PI*T/{sin_period:.2f})"
 
     # В geq: a = 0..255. Внутри пачки = alpha*255, вне = 0 (полностью прозрачный)
-    geq_alpha = f"if({is_dark_expr}\\,255*({alpha_expr})\\,0)"
+    # Внутри одинарных кавычек запятые не нужно экранировать
+    geq_alpha = f"if({is_dark_expr},255*({alpha_expr}),0)"
 
     safe_dur = duration + 10
 
