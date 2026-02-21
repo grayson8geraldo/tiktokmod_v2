@@ -1,0 +1,43 @@
+{
+  "zero_frame": {
+    "enabled": true,
+    "mode": "gray",
+    "image_path": null,
+    "duration": 0.5,
+    "transition": "fade",
+    "fade_duration": 0.3
+  },
+  "matryoshka": {
+    "enabled": true,
+    "output_width": 1080,
+    "output_height": 1920,
+    "background_image": null,
+    "video_scale": 0.96,
+    "position_jitter": 3,
+    "noise_opacity": 0.02
+  },
+  "flicker": {
+    "enabled": true,
+    "interleave_every": 2,
+    "phase_shift_interval": 2.0,
+    "phase_shift_black_frames": 3
+  },
+  "digital_dna": {
+    "enabled": true,
+    "strip_metadata": true,
+    "inject_fake_metadata": true,
+    "trim_tail_frames_min": 2,
+    "trim_tail_frames_max": 5,
+    "audio_bitrate_shift_kbps": 1,
+    "horizontal_flip": false
+  },
+  "audio": {
+    "enabled": true,
+    "pitch_shift_semitones": 0.2,
+    "pitch_direction": "random",
+    "pink_noise_volume_db": -45.0
+  },
+  "temp_dir": "/tmp/videomod_temp",
+  "ffmpeg_path": "ffmpeg",
+  "ffprobe_path": "ffprobe"
+}
