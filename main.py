@@ -6,7 +6,7 @@
 Использование:
     python main.py input.mp4 output.mp4 [опции]
     python main.py input.mp4 output.mp4 --config preset.json
-    python main.py input.mp4 output.mp4 --no-flicker --no-audio --flip
+    python main.py input.mp4 output.mp4 --anchor-category 02_Urban_EU
 """
 
 import argparse
@@ -17,7 +17,8 @@ import sys
 
 from config import (
     PipelineConfig,
-    ZeroFrameConfig,
+    AnchorConfig,
+    HookGapConfig,
     MatryoshkaConfig,
     FlickerConfig,
     DigitalDNAConfig,
@@ -42,30 +43,20 @@ def load_config_from_json(path: str) -> PipelineConfig:
 
     cfg = PipelineConfig()
 
-    if "zero_frame" in data:
-        for k, v in data["zero_frame"].items():
-            if hasattr(cfg.zero_frame, k):
-                setattr(cfg.zero_frame, k, v)
+    section_map = {
+        "anchor": cfg.anchor,
+        "hook_gap": cfg.hook_gap,
+        "matryoshka": cfg.matryoshka,
+        "flicker": cfg.flicker,
+        "digital_dna": cfg.digital_dna,
+        "audio": cfg.audio,
+    }
 
-    if "matryoshka" in data:
-        for k, v in data["matryoshka"].items():
-            if hasattr(cfg.matryoshka, k):
-                setattr(cfg.matryoshka, k, v)
-
-    if "flicker" in data:
-        for k, v in data["flicker"].items():
-            if hasattr(cfg.flicker, k):
-                setattr(cfg.flicker, k, v)
-
-    if "digital_dna" in data:
-        for k, v in data["digital_dna"].items():
-            if hasattr(cfg.digital_dna, k):
-                setattr(cfg.digital_dna, k, v)
-
-    if "audio" in data:
-        for k, v in data["audio"].items():
-            if hasattr(cfg.audio, k):
-                setattr(cfg.audio, k, v)
+    for section_name, section_obj in section_map.items():
+        if section_name in data:
+            for k, v in data[section_name].items():
+                if hasattr(section_obj, k):
+                    setattr(section_obj, k, v)
 
     for k in ("temp_dir", "ffmpeg_path", "ffprobe_path"):
         if k in data:
@@ -81,42 +72,43 @@ def build_config_from_args(args: argparse.Namespace) -> PipelineConfig:
     else:
         cfg = PipelineConfig()
 
-    # --- Zero Frame ---
-    if args.no_zero_frame:
-        cfg.zero_frame.enabled = False
-    if args.zero_frame_mode:
-        cfg.zero_frame.mode = args.zero_frame_mode
-    if args.zero_frame_image:
-        cfg.zero_frame.mode = "image"
-        cfg.zero_frame.image_path = args.zero_frame_image
-    if args.zero_frame_duration is not None:
-        cfg.zero_frame.duration = args.zero_frame_duration
-    if args.zero_frame_transition:
-        cfg.zero_frame.transition = args.zero_frame_transition
+    # --- Anchor ---
+    if args.anchor_root:
+        cfg.anchor.anchors_root = args.anchor_root
+    if args.anchor_category:
+        cfg.anchor.category = args.anchor_category
+    if args.anchor_head_frames is not None:
+        cfg.anchor.head_frames = args.anchor_head_frames
+    if args.no_anchor_hflip:
+        cfg.anchor.random_hflip = False
+    if args.anchor_blur is not None:
+        cfg.anchor.background_blur = args.anchor_blur
+
+    # --- Hook Gap ---
+    if args.hook_gap_duration is not None:
+        cfg.hook_gap.duration = args.hook_gap_duration
+    if args.hook_gap_noise is not None:
+        cfg.hook_gap.noise_strength = args.hook_gap_noise
 
     # --- Matryoshka ---
-    if args.no_matryoshka:
-        cfg.matryoshka.enabled = False
-    if args.background:
-        cfg.matryoshka.background_image = args.background
     if args.scale is not None:
         cfg.matryoshka.video_scale = args.scale
     if args.noise_opacity is not None:
         cfg.matryoshka.noise_opacity = args.noise_opacity
+    if args.shadow_strength is not None:
+        cfg.matryoshka.shadow_strength = args.shadow_strength
 
     # --- Flicker ---
     if args.no_flicker:
-        cfg.flicker.enabled = False
-    if args.phase_interval is not None:
-        cfg.flicker.phase_shift_interval = args.phase_interval
+        cfg.flicker.transparency = 0.0
+    if args.flicker_transparency is not None:
+        cfg.flicker.transparency = args.flicker_transparency
 
     # --- Digital DNA ---
     if args.no_dna:
         cfg.digital_dna.enabled = False
     if args.flip:
         cfg.digital_dna.horizontal_flip = True
-    if args.no_flip:
-        cfg.digital_dna.horizontal_flip = False
     if args.no_fake_meta:
         cfg.digital_dna.inject_fake_metadata = False
 
@@ -159,17 +151,14 @@ def main():
   # Полная обработка со всеми модулями
   python main.py input.mp4 output.mp4
 
+  # С выбором категории якоря
+  python main.py input.mp4 output.mp4 --anchor-category 02_Urban_EU
+
   # Без мерцания и с горизонтальным флипом
   python main.py input.mp4 output.mp4 --no-flicker --flip
 
-  # С пользовательским фоном и изображением нулевого кадра
-  python main.py input.mp4 output.mp4 --background bg.jpg --zero-frame-image intro.png
-
   # Загрузка настроек из JSON
   python main.py input.mp4 output.mp4 --config my_preset.json
-
-  # Сохранить конфиг по умолчанию
-  python main.py --save-config default_config.json
         """,
     )
 
@@ -179,31 +168,34 @@ def main():
     parser.add_argument("--save-config", help="Сохранить конфиг по умолчанию в JSON и выйти")
     parser.add_argument("-v", "--verbose", action="store_true", help="Подробный вывод")
 
-    # Zero Frame
-    zf = parser.add_argument_group("Модуль: Нулевой кадр")
-    zf.add_argument("--no-zero-frame", action="store_true", help="Отключить нулевой кадр")
-    zf.add_argument("--zero-frame-mode", choices=["gray", "image"], help="Тип нулевого кадра")
-    zf.add_argument("--zero-frame-image", help="Изображение для нулевого кадра")
-    zf.add_argument("--zero-frame-duration", type=float, help="Длительность (0.1–1.5 сек)")
-    zf.add_argument("--zero-frame-transition", choices=["fade", "cut"], help="Тип перехода")
+    # Anchor
+    an = parser.add_argument_group("Модуль: Якорь")
+    an.add_argument("--anchor-root", help="Корневая папка с якорями")
+    an.add_argument("--anchor-category", help="Категория якоря (подпапка)")
+    an.add_argument("--anchor-head-frames", type=int, help="Кадров якоря в начале (10-12)")
+    an.add_argument("--no-anchor-hflip", action="store_true", help="Отключить случайный hflip якоря")
+    an.add_argument("--anchor-blur", type=int, help="Размытие подложки (пиксели)")
+
+    # Hook Gap
+    hg = parser.add_argument_group("Модуль: Hook Gap")
+    hg.add_argument("--hook-gap-duration", type=float, help="Длительность Hook Gap (0.3-0.6с)")
+    hg.add_argument("--hook-gap-noise", type=int, help="Сила шума Hook Gap (0-20)")
 
     # Matryoshka
     mt = parser.add_argument_group("Модуль: Матрёшка")
-    mt.add_argument("--no-matryoshka", action="store_true", help="Отключить матрёшку")
-    mt.add_argument("--background", "-bg", help="Фоновое изображение-подложка")
-    mt.add_argument("--scale", type=float, help="Масштаб видео (0.95–0.98)")
+    mt.add_argument("--scale", type=float, help="Масштаб видео (0.94–0.97)")
     mt.add_argument("--noise-opacity", type=float, help="Прозрачность шума (0.01–0.03)")
+    mt.add_argument("--shadow-strength", type=int, help="Сила тени (0-10)")
 
     # Flicker
     fl = parser.add_argument_group("Модуль: Мерцание")
     fl.add_argument("--no-flicker", action="store_true", help="Отключить мерцание")
-    fl.add_argument("--phase-interval", type=float, help="Интервал сдвига фазы (сек)")
+    fl.add_argument("--flicker-transparency", type=float, help="Прозрачность при пропуске (0.0-1.0)")
 
     # Digital DNA
     dd = parser.add_argument_group("Модуль: Цифровое ДНК")
     dd.add_argument("--no-dna", action="store_true", help="Отключить цифровое ДНК")
     dd.add_argument("--flip", action="store_true", help="Горизонтальный флип")
-    dd.add_argument("--no-flip", action="store_true", help="Отключить горизонтальный флип")
     dd.add_argument("--no-fake-meta", action="store_true", help="Не вставлять фейковые метаданные")
 
     # Audio

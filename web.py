@@ -22,13 +22,13 @@ from flask import (
 )
 
 from config import (
+    AnchorConfig,
     AudioConfig,
     DigitalDNAConfig,
     FlickerConfig,
-    ImageIntroConfig,
+    HookGapConfig,
     MatryoshkaConfig,
     PipelineConfig,
-    ZeroFrameConfig,
 )
 from pipeline import run_pipeline
 
@@ -74,18 +74,26 @@ def _build_config_from_form(form: dict) -> PipelineConfig:
     """Преобразует данные формы в PipelineConfig."""
     cfg = PipelineConfig(temp_dir=TEMP_DIR)
 
-    # --- Режим (preset) ---
-    cfg.preset = form.get("preset", "gray_image_flicker")
+    # --- Anchor (якорь) ---
+    cfg.anchor.anchors_root = form.get(
+        "anchor_root",
+        os.path.join(BASE_DIR, "assets", "anchors"),
+    )
+    category = form.get("anchor_category", "")
+    cfg.anchor.category = category if category else None
+    cfg.anchor.head_frames = int(form.get("anchor_head_frames", 10))
+    cfg.anchor.random_hflip = form.get("anchor_hflip") == "on"
+    cfg.anchor.exposure_shift_pct = float(form.get("anchor_exposure", 1.0))
+    cfg.anchor.color_shift_pct = float(form.get("anchor_color_shift", 1.5))
+    cfg.anchor.iso_grain_strength = int(form.get("anchor_grain", 3))
+    cfg.anchor.background_blur = int(form.get("anchor_blur", 3))
+    cfg.anchor.audio_fade_duration = float(form.get("anchor_audio_fade", 2.5))
 
-    # --- Zero Frame (серый сегмент) ---
-    cfg.zero_frame.gray_duration = float(form.get("zf_gray_duration", 0.3))
-    cfg.zero_frame.transition = form.get("zf_transition", "fade")
-    cfg.zero_frame.fade_duration = float(form.get("zf_fade_duration", 0.2))
-
-    # --- Image Intro (вступительная картинка) ---
-    cfg.image_intro.duration = float(form.get("img_duration", 0.7))
-    cfg.image_intro.transition = form.get("img_transition", "fade")
-    cfg.image_intro.fade_duration = float(form.get("img_fade_duration", 0.2))
+    # --- Hook Gap ---
+    cfg.hook_gap.duration = float(form.get("hg_duration", 0.4))
+    cfg.hook_gap.noise_strength = int(form.get("hg_noise", 4))
+    cfg.hook_gap.pink_noise_db = float(form.get("hg_pink_db", -40.0))
+    cfg.hook_gap.crossfade_duration = float(form.get("hg_crossfade", 0.1))
 
     # --- Matryoshka ---
     cfg.matryoshka.output_width = int(form.get("mt_width", 1080))
@@ -93,14 +101,15 @@ def _build_config_from_form(form: dict) -> PipelineConfig:
     cfg.matryoshka.video_scale = float(form.get("mt_scale", 0.96))
     cfg.matryoshka.position_jitter = int(form.get("mt_jitter", 3))
     cfg.matryoshka.noise_opacity = float(form.get("mt_noise", 0.02))
+    cfg.matryoshka.shadow_strength = int(form.get("mt_shadow_strength", 4))
+    cfg.matryoshka.shadow_opacity = float(form.get("mt_shadow_opacity", 0.3))
 
-    # --- Flicker ---
-    cfg.flicker.alpha_min = float(form.get("fl_alpha_min", 0.7))
-    cfg.flicker.alpha_max = float(form.get("fl_alpha_max", 0.9))
-    cfg.flicker.burst_interval_min = float(form.get("fl_burst_int_min", 1.8))
-    cfg.flicker.burst_interval_max = float(form.get("fl_burst_int_max", 2.4))
+    # --- Flicker (Soft Interleaving) ---
+    cfg.flicker.transparency = float(form.get("fl_transparency", 0.85))
+    cfg.flicker.burst_interval_min = float(form.get("fl_burst_int_min", 1.5))
+    cfg.flicker.burst_interval_max = float(form.get("fl_burst_int_max", 2.5))
     cfg.flicker.burst_frames_min = int(form.get("fl_burst_fr_min", 2))
-    cfg.flicker.burst_frames_max = int(form.get("fl_burst_fr_max", 4))
+    cfg.flicker.burst_frames_max = int(form.get("fl_burst_fr_max", 3))
     cfg.flicker.motion_blur = form.get("fl_blur") == "on"
 
     # --- Digital DNA ---
@@ -141,14 +150,18 @@ def _process_job(job_id: str, input_path: str, output_path: str, cfg: PipelineCo
             def emit(self, record):
                 msg = self.format(record)
                 jobs[job_id]["message"] = msg
-                if "Шаг 1/4" in msg:
-                    jobs[job_id]["progress"] = 10
-                elif "Шаг 2/4" in msg:
-                    jobs[job_id]["progress"] = 35
-                elif "Шаг 3/4" in msg:
-                    jobs[job_id]["progress"] = 65
-                elif "Шаг 4/4" in msg:
-                    jobs[job_id]["progress"] = 80
+                if "Шаг 1/6" in msg:
+                    jobs[job_id]["progress"] = 5
+                elif "Шаг 2/6" in msg:
+                    jobs[job_id]["progress"] = 15
+                elif "Шаг 3/6" in msg:
+                    jobs[job_id]["progress"] = 25
+                elif "Шаг 4/6" in msg:
+                    jobs[job_id]["progress"] = 50
+                elif "Шаг 5/6" in msg:
+                    jobs[job_id]["progress"] = 70
+                elif "Шаг 6/6" in msg:
+                    jobs[job_id]["progress"] = 85
                 elif "Обработка завершена" in msg:
                     jobs[job_id]["progress"] = 100
 
@@ -156,8 +169,9 @@ def _process_job(job_id: str, input_path: str, output_path: str, cfg: PipelineCo
         handler.setFormatter(logging.Formatter("%(message)s"))
 
         for logger_name in (
-            "pipeline", "modules.zero_frame", "modules.matryoshka",
-            "modules.flicker", "modules.digital_dna", "modules.audio",
+            "pipeline", "modules.anchor_manager", "modules.hook_gap",
+            "modules.matryoshka", "modules.flicker",
+            "modules.digital_dna", "modules.audio",
         ):
             logging.getLogger(logger_name).addHandler(handler)
 
@@ -169,8 +183,9 @@ def _process_job(job_id: str, input_path: str, output_path: str, cfg: PipelineCo
         jobs[job_id]["output_path"] = output_path
 
         for logger_name in (
-            "pipeline", "modules.zero_frame", "modules.matryoshka",
-            "modules.flicker", "modules.digital_dna", "modules.audio",
+            "pipeline", "modules.anchor_manager", "modules.hook_gap",
+            "modules.matryoshka", "modules.flicker",
+            "modules.digital_dna", "modules.audio",
         ):
             logging.getLogger(logger_name).removeHandler(handler)
 
@@ -224,15 +239,6 @@ def upload():
     output_path = os.path.join(PROCESSED_DIR, output_filename)
 
     cfg = _build_config_from_form(request.form)
-
-    # Обработка изображения (одно изображение для подложки и вступления)
-    if "background_image" in request.files:
-        bg_file = request.files["background_image"]
-        if bg_file.filename:
-            bg_ext = bg_file.filename.rsplit(".", 1)[-1].lower()
-            bg_path = os.path.join(UPLOAD_DIR, f"{job_id}_bg.{bg_ext}")
-            bg_file.save(bg_path)
-            cfg.image_intro.image_path = bg_path
 
     jobs[job_id] = {
         "status": "queued",

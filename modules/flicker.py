@@ -1,28 +1,31 @@
 """
-Модуль: Кадровое мерцание (Flicker) v2.
+Модуль В: Адаптивное мерцание (Soft Interleaving).
 
-Принципиальные отличия от v1:
-  1. Overlay с переменной прозрачностью вместо drawbox.
-     Чёрный слой с alpha, модулированным sin(), оставляет 10-30%
-     видимости видео — мягче для модерации.
+Принципиальные отличия:
+  1. Вместо Видео/Чёрный — Видео/Подложка.
+     Когда наступает фаза «пропуска», основное видео становится прозрачным
+     на 85%, обнажая подложку под ним.
 
-  2. Рандомизация «битых тактов».
-     Интервал между пачками: случайный (1.8–2.4 сек).
-     Длительность пачки: случайная (2–4 кадра).
+  2. Рандомизация «пропусков»:
+     Интервал между пропусками: случайный (1.5–2.5 сек).
+     Длительность пропуска: случайная (2-3 кадра).
      Каждое видео — уникальная структура таймлайна.
 
   3. Motion blur (tblend) для сглаживания стыков.
 
-Этот модуль генерирует FFmpeg filter фрагмент для применения
-к видеопотоку. Может использоваться как самостоятельно, так и встроенным
-в filter_complex матрёшки (для мерцания только на видео, не на подложке).
+Этот модуль генерирует FFmpeg filter фрагмент для встраивания
+в filter_complex матрёшки. Работает с альфа-каналом основного видео:
+  - Нормально: alpha = 255 (видео полностью непрозрачно)
+  - При пропуске: alpha ≈ 38 (15% видимости видео, 85% подложки)
+
+Поскольку видео лежит НАД подложкой через overlay,
+уменьшение alpha обнажает подложку — это и есть нужный эффект.
 """
 
 import logging
 import random
 
 from config import FlickerConfig
-from modules.utils import run_cmd, get_video_info
 
 logger = logging.getLogger(__name__)
 
@@ -31,25 +34,22 @@ def _generate_burst_schedule(
     duration: float, fps: float, cfg: FlickerConfig,
 ) -> list[tuple[int, int]]:
     """
-    Предварительно вычисляет рандомизированное расписание пачек затемнения.
+    Предварительно вычисляет рандомизированное расписание пропусков.
 
     Возвращает список (start_frame, end_frame) — включительно.
-    Интервалы и длительности рандомизированы, так что каждый вызов
-    даёт уникальную структуру таймлайна.
+    Во время этих кадров видео станет почти прозрачным.
     """
     schedule = []
     total_frames = int(duration * fps)
     current_frame = 0
 
     while current_frame < total_frames:
-        # Случайный интервал до следующей пачки
         interval_sec = random.uniform(cfg.burst_interval_min, cfg.burst_interval_max)
         current_frame += int(interval_sec * fps)
 
         if current_frame >= total_frames:
             break
 
-        # Случайная длительность пачки
         burst_len = random.randint(cfg.burst_frames_min, cfg.burst_frames_max)
         end_frame = min(current_frame + burst_len - 1, total_frames - 1)
 
@@ -69,17 +69,17 @@ def build_flicker_filters(
     output_label: str = "[flickered]",
 ) -> str:
     """
-    Строит цепочку FFmpeg-фильтров для мерцания с overlay.
+    Строит цепочку FFmpeg-фильтров для мерцания Видео/Подложка.
 
     Подход:
-      1. Генерируем маленький (4x4) чёрный источник с альфа-каналом.
-      2. geq задаёт alpha с sin-модуляцией (0 вне пачек, 0.7–0.9 внутри).
-      3. Масштабируем до размеров видео (nearest neighbor — быстро).
-      4. overlay на исходное видео.
-      5. Опционально tblend для motion blur.
+      1. Добавляем альфа-канал к основному видео (format=yuva420p).
+      2. Через geq модулируем alpha:
+         - Нормально: alpha = 255 (полностью непрозрачно)
+         - Во время пропуска: alpha = (1 - transparency) * 255
+      3. Опционально tblend для motion blur (до geq).
 
     Рандомизация:
-      Расписание пачек вычисляется заранее в Python (random),
+      Расписание пропусков вычисляется заранее в Python (random),
       а в FFmpeg передаётся как серия between(N,start,end).
     """
     schedule = _generate_burst_schedule(duration, fps, cfg)
@@ -88,101 +88,45 @@ def build_flicker_filters(
         logger.warning("Расписание мерцания пустое (видео слишком короткое?)")
         return f"{input_label}null{output_label}"
 
-    # --- Условие: «мы внутри какой-либо пачки» ---
-    # В geq переменные с большой буквы: N = номер кадра, T = время
-    # Собираем OR из between(N,start,end)
+    # --- Условие: «мы внутри какого-либо пропуска» ---
+    # В geq переменные с большой буквы: N = номер кадра
     conditions = [f"between(N,{s},{e})" for s, e in schedule]
-    is_dark_expr = "+".join(conditions)
+    is_skip_expr = "+".join(conditions)
 
-    # --- Alpha с sin-модуляцией ---
-    # Прозрачность чёрного плавно гуляет между alpha_min и alpha_max.
-    # sin даёт «дрожание» в пределах пачки, а не резкое включение/выключение.
-    # Период ~0.15 сек — достаточно быстро для видимого «flutter».
-    alpha_mid = (cfg.alpha_min + cfg.alpha_max) / 2
-    alpha_amp = (cfg.alpha_max - cfg.alpha_min) / 2
-    sin_period = 0.15
+    # --- Alpha: полная видимость / почти прозрачный ---
+    # transparency=0.85 → alpha при пропуске = (1-0.85)*255 ≈ 38
+    alpha_normal = 255
+    alpha_skip = int((1.0 - cfg.transparency) * 255)
 
-    # alpha_expr даёт значение 0..1 (доля чёрного)
-    alpha_expr = f"{alpha_mid:.3f}+{alpha_amp:.3f}*sin(2*PI*T/{sin_period:.2f})"
+    # geq alpha: в пропуске = alpha_skip, иначе = 255
+    geq_alpha = f"if({is_skip_expr},{alpha_skip},{alpha_normal})"
 
-    # В geq: a = 0..255. Внутри пачки = alpha*255, вне = 0 (полностью прозрачный)
-    # Внутри одинарных кавычек запятые не нужно экранировать
-    geq_alpha = f"if({is_dark_expr},255*({alpha_expr}),0)"
+    # Сборка цепочки фильтров
+    chain_parts = []
 
-    safe_dur = duration + 10
-
-    parts = []
-
-    # 1. Маленький чёрный источник → альфа через geq → масштаб
-    parts.append(
-        f"color=black:s=4x4:r={fps}:d={safe_dur},"
-        f"format=yuva420p,"
-        f"geq=lum=0:cb=128:cr=128:a='{geq_alpha}',"
-        f"scale={width}:{height}:flags=neighbor"
-        f"[_fl_dark]"
-    )
-
-    # 2. Overlay чёрного слоя на видео
-    parts.append(
-        f"{input_label}[_fl_dark]overlay=format=auto[_fl_ov]"
-    )
-
-    # 3. Motion blur (сглаживание стыков)
+    # Motion blur (до geq, пока формат ещё yuv420p)
     if cfg.motion_blur:
-        parts.append(f"[_fl_ov]tblend=all_mode=average{output_label}")
-    else:
-        parts.append(f"[_fl_ov]null{output_label}")
+        chain_parts.append("tblend=all_mode=average")
 
-    filter_str = ";".join(parts)
+    # Добавляем альфа-канал
+    chain_parts.append("format=yuva420p")
+
+    # Модулируем alpha через geq (lum/cb/cr — pass-through)
+    chain_parts.append(
+        f"geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='{geq_alpha}'"
+    )
+
+    chain = ",".join(chain_parts)
+    filter_str = f"{input_label}{chain}{output_label}"
 
     logger.info(
-        "Мерцание: %d пачек, alpha=%.0f–%.0f%%, burst=%d–%d кадров, "
+        "Мерцание: %d пропусков, прозрачность=%d%%, burst=%d–%d кадров, "
         "интервал=%.1f–%.1fс, blur=%s",
         len(schedule),
-        cfg.alpha_min * 100, cfg.alpha_max * 100,
+        int(cfg.transparency * 100),
         cfg.burst_frames_min, cfg.burst_frames_max,
         cfg.burst_interval_min, cfg.burst_interval_max,
         cfg.motion_blur,
     )
 
     return filter_str
-
-
-def process(
-    input_path: str,
-    output_path: str,
-    cfg: FlickerConfig,
-    ffmpeg: str = "ffmpeg",
-    ffprobe: str = "ffprobe",
-    temp_dir: str = "/tmp/videomod_temp",
-) -> str:
-    """
-    Применяет мерцание к видеофайлу (самостоятельный режим, без подложки).
-    """
-    info = get_video_info(ffprobe, input_path)
-    fps = info["fps"]
-    duration = info["duration"]
-    w = info["width"]
-    h = info["height"]
-
-    filter_str = build_flicker_filters(
-        cfg, fps, duration,
-        width=w, height=h,
-        input_label="[0:v]",
-        output_label="[outv]",
-    )
-
-    run_cmd([
-        ffmpeg, "-y",
-        "-i", input_path,
-        "-filter_complex", filter_str,
-        "-map", "[outv]",
-        "-map", "0:a?",
-        "-c:v", "libx264", "-preset", "fast",
-        "-c:a", "copy",
-        "-pix_fmt", "yuv420p",
-        output_path,
-    ], "кадровое мерцание")
-
-    logger.info("Мерцание применено: %s", output_path)
-    return output_path
