@@ -7,7 +7,7 @@
   - Паттерн 2-1-2: 2 видимых → 1 тёмный → 2 видимых (вместо 1:1)
   - Сдвиг фазы: пачка тёмных кадров каждые N секунд
 
-Этот модуль генерирует FFmpeg filter_complex фрагмент для применения
+Этот модуль генерирует FFmpeg filter фрагмент для применения
 к видеопотоку. Может использоваться как самостоятельно, так и встроенным
 в filter_complex матрёшки (для мерцания только на видео, не на подложке).
 """
@@ -26,8 +26,8 @@ def build_flicker_filters(cfg: FlickerConfig, fps: float,
     """
     Строит цепочку FFmpeg-фильтров для мерцания.
 
-    Возвращает строку filter_complex фрагмента:
-      [input_label] → geq (alpha-blending) → tblend (motion blur) → [output_label]
+    Использует drawbox с альфа-каналом (color=black@ALPHA) для мягкого
+    затемнения, а не полностью чёрный кадр. Затем tblend для motion blur.
 
     Паттерн: visible_frames видимых, затем dark_frames затемнённых.
     На затемнённых кадрах видео видно на dark_opacity (0.18 = 18%).
@@ -36,6 +36,8 @@ def build_flicker_filters(cfg: FlickerConfig, fps: float,
     dark = cfg.dark_frames       # 1
     cycle = vis + dark           # 3
     opacity = cfg.dark_opacity   # 0.18
+    # Прозрачность чёрного = 1 - opacity (0.82 = 82% чёрного, 18% видео)
+    black_alpha = 1.0 - opacity
 
     phase_interval_frames = int(fps * cfg.phase_shift_interval)
     burst = cfg.phase_shift_dark_frames
@@ -46,35 +48,29 @@ def build_flicker_filters(cfg: FlickerConfig, fps: float,
     #   2) mod(n, phase_interval) < burst   (пачка тёмных на сдвиге фазы)
     cond_pattern = f"gte(mod(n\\,{cycle})\\,{vis})"
     cond_phase = f"lt(mod(n\\,{phase_interval_frames})\\,{burst})"
-    # is_dark = 1 если хотя бы одно условие (сумма > 0 → gt > 0)
-    is_dark = f"gt({cond_pattern}+{cond_phase}\\,0)"
 
-    # --- Alpha-blending через geq ---
-    # Для светлых кадров: factor = 1.0 (без изменений)
-    # Для тёмных кадров: factor = dark_opacity (0.18)
-    # factor = 1 - is_dark * (1 - opacity)
-    # Применяем к каждому каналу: p(X,Y) * factor
-    factor = f"(1-{is_dark}*{1.0 - opacity:.2f})"
-    geq_filter = (
-        f"geq="
-        f"lum='lum(X\\,Y)*{factor}':"
-        f"cb='cb(X\\,Y)':"
-        f"cr='cr(X\\,Y)'"
+    # Объединяем: затемнить если ЛЮБОЕ условие истинно
+    enable_expr = f"'{cond_pattern}+{cond_phase}'"
+
+    # --- drawbox с альфа-каналом ---
+    # color=black@0.82 = 82% непрозрачный чёрный → 18% оригинала видно
+    drawbox_filter = (
+        f"drawbox=x=0:y=0:w=iw:h=ih:"
+        f"color=black@{black_alpha:.2f}:t=fill:"
+        f"enable={enable_expr}"
     )
 
     # --- Сборка цепочки ---
-    strip_input = input_label
     parts = []
 
-    # geq для alpha-blending
-    parts.append(f"{strip_input}{geq_filter}[_fl_geq]")
+    # drawbox для alpha-blending
+    parts.append(f"{input_label}{drawbox_filter}[_fl_box]")
 
     # tblend для motion blur (сглаживание стыков)
     if cfg.motion_blur:
-        parts.append(f"[_fl_geq]tblend=all_mode=average{output_label}")
+        parts.append(f"[_fl_box]tblend=all_mode=average{output_label}")
     else:
-        # Без motion blur — просто переименовываем
-        parts.append(f"[_fl_geq]null{output_label}")
+        parts.append(f"[_fl_box]null{output_label}")
 
     return ";".join(parts)
 
