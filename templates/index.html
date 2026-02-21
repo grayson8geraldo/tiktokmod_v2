@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoMod — Уникализация видео</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+
+    <header>
+        <h1>VideoMod</h1>
+        <p class="subtitle">Глубокая уникализация и многослойная обработка видео</p>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="flashes">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <form action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" id="mainForm">
+
+        <!-- ============================================================ -->
+        <!-- Загрузка видео                                               -->
+        <!-- ============================================================ -->
+        <section class="card upload-card">
+            <h2>Загрузка видео</h2>
+            <div class="upload-zone" id="dropZone">
+                <input type="file" name="video" id="videoInput" accept=".mp4,.mov,.avi,.mkv,.webm,.m4v" required>
+                <div class="upload-placeholder" id="uploadPlaceholder">
+                    <div class="upload-icon">&#9654;</div>
+                    <p>Перетащите видеофайл сюда или нажмите для выбора</p>
+                    <p class="upload-hint">MP4, MOV, AVI, MKV, WebM &bull; до 500 МБ</p>
+                </div>
+                <div class="upload-preview" id="uploadPreview" style="display:none">
+                    <span class="file-icon">&#128206;</span>
+                    <span class="file-name" id="fileName"></span>
+                    <span class="file-size" id="fileSize"></span>
+                    <button type="button" class="btn-clear" id="clearFile">&times;</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Модуль 1: Нулевой кадр                                       -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <label class="toggle">
+                    <input type="checkbox" name="zf_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <h2>1. Нулевой кадр</h2>
+                <span class="badge">Подготовка</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Вставка технического сегмента в начало таймлайна.</p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Режим</label>
+                        <select name="zf_mode" id="zfMode">
+                            <option value="gray" selected>Серый кадр (#808080)</option>
+                            <option value="image">Произвольное изображение</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Длительность (сек)</label>
+                        <input type="number" name="zf_duration" value="0.5" min="0.1" max="1.5" step="0.1">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Переход</label>
+                        <select name="zf_transition">
+                            <option value="fade" selected>Плавный (fade)</option>
+                            <option value="cut">Резкий (cut)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Длительность фейда (сек)</label>
+                        <input type="number" name="zf_fade_duration" value="0.3" min="0.1" max="1.0" step="0.1">
+                    </div>
+                </div>
+
+                <div class="form-row" id="zfImageRow" style="display:none">
+                    <div class="form-group full">
+                        <label>Изображение для нулевого кадра</label>
+                        <input type="file" name="zf_image" accept="image/*">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Модуль 2: Матрёшка                                           -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <label class="toggle">
+                    <input type="checkbox" name="mt_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <h2>2. Визуальная Матрёшка</h2>
+                <span class="badge">Слои</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Трёхслойная композиция: подложка + основное видео + динамический шум.</p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Ширина (px)</label>
+                        <input type="number" name="mt_width" value="1080" min="360" max="3840" step="2">
+                    </div>
+                    <div class="form-group">
+                        <label>Высота (px)</label>
+                        <input type="number" name="mt_height" value="1920" min="640" max="3840" step="2">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Масштаб видео</label>
+                        <div class="range-wrap">
+                            <input type="range" name="mt_scale" value="0.96" min="0.90" max="0.99" step="0.01"
+                                   id="mtScale" oninput="document.getElementById('mtScaleVal').textContent=this.value">
+                            <span class="range-val" id="mtScaleVal">0.96</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Микро-сдвиг (px)</label>
+                        <input type="number" name="mt_jitter" value="3" min="0" max="20">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Прозрачность шума</label>
+                        <div class="range-wrap">
+                            <input type="range" name="mt_noise" value="0.02" min="0.005" max="0.05" step="0.005"
+                                   id="mtNoise" oninput="document.getElementById('mtNoiseVal').textContent=this.value">
+                            <span class="range-val" id="mtNoiseVal">0.02</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Фоновое изображение</label>
+                        <input type="file" name="mt_background" accept="image/*">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Модуль 3: Мерцание                                           -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <label class="toggle">
+                    <input type="checkbox" name="fl_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <h2>3. Кадровое мерцание</h2>
+                <span class="badge">Interleaving</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Чередование кадров видео с чёрными кадрами + сдвиг фазы для рассинхронизации.</p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Чередование каждые N кадров</label>
+                        <input type="number" name="fl_interleave" value="2" min="2" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Интервал сдвига фазы (сек)</label>
+                        <input type="number" name="fl_phase_interval" value="2.0" min="0.5" max="10" step="0.5">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Чёрных кадров при паузе</label>
+                        <input type="number" name="fl_black_frames" value="3" min="1" max="10">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Модуль 4: Цифровое ДНК                                       -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <label class="toggle">
+                    <input type="checkbox" name="dd_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <h2>4. Цифровое ДНК</h2>
+                <span class="badge">Уникализация</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Очистка метаданных, инъекция фейковых данных, микро-обрезка, изменение битрейта.</p>
+
+                <div class="form-row checkboxes">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="dd_strip_meta" checked>
+                        Удалить метаданные
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="dd_fake_meta" checked>
+                        Вставить фейковые метаданные
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="dd_flip">
+                        Горизонтальный флип
+                    </label>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Обрезка хвоста (мин. кадров)</label>
+                        <input type="number" name="dd_trim_min" value="2" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Обрезка хвоста (макс. кадров)</label>
+                        <input type="number" name="dd_trim_max" value="5" min="1" max="20">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Сдвиг битрейта аудио (кбит/с)</label>
+                        <input type="number" name="dd_bitrate_shift" value="1" min="1" max="5">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Модуль 5: Аудио                                              -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <label class="toggle">
+                    <input type="checkbox" name="au_enabled" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <h2>5. Аудио-модуль</h2>
+                <span class="badge">Звук</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Pitch shift голоса/музыки и наложение розового шума для изменения спектрограммы.</p>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Pitch shift (полутоны)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="au_pitch" value="0.2" min="0.05" max="0.5" step="0.05"
+                                   id="auPitch" oninput="document.getElementById('auPitchVal').textContent=this.value">
+                            <span class="range-val" id="auPitchVal">0.2</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Направление</label>
+                        <select name="au_pitch_dir">
+                            <option value="random" selected>Случайное</option>
+                            <option value="up">Вверх</option>
+                            <option value="down">Вниз</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Громкость розового шума (дБ)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="au_pink_db" value="-45" min="-60" max="-25" step="1"
+                                   id="auPink" oninput="document.getElementById('auPinkVal').textContent=this.value+' дБ'">
+                            <span class="range-val" id="auPinkVal">-45 дБ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Кнопка отправки                                              -->
+        <!-- ============================================================ -->
+        <div class="submit-row">
+            <button type="submit" class="btn-submit" id="submitBtn">
+                Обработать видео
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+// Drag & drop и превью файла
+const dropZone = document.getElementById('dropZone');
+const videoInput = document.getElementById('videoInput');
+const placeholder = document.getElementById('uploadPlaceholder');
+const preview = document.getElementById('uploadPreview');
+const fileName = document.getElementById('fileName');
+const fileSize = document.getElementById('fileSize');
+const clearBtn = document.getElementById('clearFile');
+
+function showFile(file) {
+    fileName.textContent = file.name;
+    const mb = (file.size / 1024 / 1024).toFixed(1);
+    fileSize.textContent = mb + ' МБ';
+    placeholder.style.display = 'none';
+    preview.style.display = 'flex';
+}
+
+function clearFile() {
+    videoInput.value = '';
+    placeholder.style.display = '';
+    preview.style.display = 'none';
+}
+
+videoInput.addEventListener('change', function() {
+    if (this.files.length) showFile(this.files[0]);
+});
+
+clearBtn.addEventListener('click', clearFile);
+
+dropZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('drag-over');
+});
+
+dropZone.addEventListener('dragleave', function() {
+    this.classList.remove('drag-over');
+});
+
+dropZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+        videoInput.files = e.dataTransfer.files;
+        showFile(e.dataTransfer.files[0]);
+    }
+});
+
+// Показ/скрытие поля изображения для нулевого кадра
+document.getElementById('zfMode').addEventListener('change', function() {
+    document.getElementById('zfImageRow').style.display =
+        this.value === 'image' ? '' : 'none';
+});
+
+// Блокировка кнопки при отправке
+document.getElementById('mainForm').addEventListener('submit', function() {
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Загрузка...';
+});
+</script>
+
+</body>
+</html>

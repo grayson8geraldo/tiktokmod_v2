@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VideoMod — Обработка</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container status-page">
+
+    <header>
+        <h1><a href="{{ url_for('index') }}">VideoMod</a></h1>
+    </header>
+
+    <section class="card status-card">
+        <h2>Обработка видео</h2>
+
+        <div class="status-info">
+            <div class="status-row">
+                <span class="label">Файл:</span>
+                <span class="value">{{ job.input_filename }}</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Задача:</span>
+                <span class="value mono">{{ job_id }}</span>
+            </div>
+        </div>
+
+        <!-- Прогресс-бар -->
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar" style="width: {{ job.progress }}%"></div>
+        </div>
+        <div class="progress-text">
+            <span id="progressPercent">{{ job.progress }}%</span>
+            <span id="statusBadge" class="status-badge status-{{ job.status }}">
+                {% if job.status == 'queued' %}В очереди
+                {% elif job.status == 'processing' %}Обработка
+                {% elif job.status == 'done' %}Готово
+                {% elif job.status == 'error' %}Ошибка
+                {% endif %}
+            </span>
+        </div>
+
+        <!-- Текущее действие -->
+        <div class="status-message" id="statusMessage">{{ job.message }}</div>
+
+        <!-- Этапы обработки -->
+        <div class="steps" id="steps">
+            <div class="step" data-step="1" id="step1">
+                <div class="step-dot"></div>
+                <span>Нулевой кадр</span>
+            </div>
+            <div class="step" data-step="2" id="step2">
+                <div class="step-dot"></div>
+                <span>Матрёшка</span>
+            </div>
+            <div class="step" data-step="3" id="step3">
+                <div class="step-dot"></div>
+                <span>Мерцание</span>
+            </div>
+            <div class="step" data-step="4" id="step4">
+                <div class="step-dot"></div>
+                <span>Аудио</span>
+            </div>
+            <div class="step" data-step="5" id="step5">
+                <div class="step-dot"></div>
+                <span>Цифровое ДНК</span>
+            </div>
+        </div>
+
+        <!-- Кнопки -->
+        <div class="status-actions" id="actions">
+            <a href="{{ url_for('download', job_id=job_id) }}" class="btn-submit btn-download" id="downloadBtn"
+               style="display:none">
+                Скачать результат
+            </a>
+            <a href="{{ url_for('index') }}" class="btn-back">
+                Обработать ещё
+            </a>
+        </div>
+
+        <!-- Ошибка -->
+        <div class="error-box" id="errorBox" style="display:none"></div>
+    </section>
+</div>
+
+<script>
+const JOB_ID = "{{ job_id }}";
+const API_URL = "/api/job/" + JOB_ID;
+
+function updateUI(data) {
+    // Прогресс
+    const bar = document.getElementById('progressBar');
+    const pct = document.getElementById('progressPercent');
+    bar.style.width = data.progress + '%';
+    pct.textContent = data.progress + '%';
+
+    // Сообщение
+    document.getElementById('statusMessage').textContent = data.message || '';
+
+    // Бейдж статуса
+    const badge = document.getElementById('statusBadge');
+    badge.className = 'status-badge status-' + data.status;
+    if (data.status === 'queued') badge.textContent = 'В очереди';
+    else if (data.status === 'processing') badge.textContent = 'Обработка';
+    else if (data.status === 'done') badge.textContent = 'Готово';
+    else if (data.status === 'error') badge.textContent = 'Ошибка';
+
+    // Шаги
+    const stepThresholds = [10, 25, 45, 65, 80];
+    for (let i = 0; i < 5; i++) {
+        const el = document.getElementById('step' + (i + 1));
+        if (data.progress >= stepThresholds[i]) {
+            el.classList.add('step-active');
+            if (i + 1 < 5 && data.progress >= stepThresholds[i + 1]) {
+                el.classList.add('step-done');
+                el.classList.remove('step-active');
+            }
+        }
+    }
+    if (data.progress >= 100) {
+        document.getElementById('step5').classList.add('step-done');
+        document.getElementById('step5').classList.remove('step-active');
+    }
+
+    // Готово
+    if (data.status === 'done') {
+        document.getElementById('downloadBtn').style.display = '';
+        bar.classList.add('progress-done');
+        return false; // прекратить polling
+    }
+
+    // Ошибка
+    if (data.status === 'error') {
+        const errBox = document.getElementById('errorBox');
+        errBox.style.display = '';
+        errBox.textContent = 'Ошибка: ' + data.message;
+        bar.classList.add('progress-error');
+        return false;
+    }
+
+    return true; // продолжать polling
+}
+
+function poll() {
+    fetch(API_URL)
+        .then(r => r.json())
+        .then(data => {
+            if (updateUI(data)) {
+                setTimeout(poll, 1000);
+            }
+        })
+        .catch(() => {
+            setTimeout(poll, 3000);
+        });
+}
+
+// Начальное состояние
+const initial = {{ job | tojson }};
+if (updateUI(initial)) {
+    setTimeout(poll, 1000);
+}
+</script>
+
+</body>
+</html>
