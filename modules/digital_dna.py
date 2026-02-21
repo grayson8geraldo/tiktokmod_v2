@@ -152,7 +152,14 @@ def process(
     # --- 1. Микро-обрезка (удаление 2–5 кадров с конца) ---
     trim_frames = random.randint(cfg.trim_tail_frames_min, cfg.trim_tail_frames_max)
     trim_duration = trim_frames / fps
-    new_duration = max(duration - trim_duration, 1.0)  # не менее 1 сек
+
+    # Обрезаем только если видео достаточно длинное (оставляем >= 90% или >= 2 сек)
+    if duration > trim_duration + 2.0:
+        new_duration = duration - trim_duration
+    else:
+        # Видео слишком короткое для микро-обрезки, обрезаем минимально (1 кадр)
+        new_duration = duration - (1.0 / fps)
+        trim_frames = 1
 
     logger.info("Микро-обрезка: удаляем %d кадров (%.3f сек) с конца", trim_frames, trim_duration)
 

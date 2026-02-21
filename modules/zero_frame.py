@@ -77,24 +77,36 @@ def process(
         f.write(f"file '{input_path}'\n")
 
     if cfg.transition == "fade":
-        # Сначала конкатенируем, потом добавляем crossfade между сегментами
-        # Используем xfade фильтр для плавного перехода
+        # Конкатенация с плавным переходом:
+        # Сначала конкатенируем через concat demuxer, затем fade-in на стыке
         fade_dur = min(cfg.fade_duration, cfg.duration)
-        offset = cfg.duration - fade_dur
+        concat_raw = os.path.join(temp_dir, "_concat_raw.mp4")
 
+        # Шаг 1: простая конкатенация
         run_cmd([
             ffmpeg, "-y",
-            "-i", zero_segment,
-            "-i", input_path,
-            "-filter_complex",
-            f"[0:v][1:v]xfade=transition=fade:duration={fade_dur}:offset={offset}[vout];"
-            f"[0:a][1:a]acrossfade=d={fade_dur}[aout]",
-            "-map", "[vout]", "-map", "[aout]",
+            "-f", "concat", "-safe", "0",
+            "-i", concat_list,
+            "-c:v", "libx264", "-preset", "fast",
+            "-c:a", "aac", "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            concat_raw,
+        ], "конкатенация для фейда")
+
+        # Шаг 2: fade-out на нулевом сегменте + fade-in на стыке
+        fade_start = max(cfg.duration - fade_dur, 0)
+        run_cmd([
+            ffmpeg, "-y",
+            "-i", concat_raw,
+            "-vf", f"fade=t=out:st={fade_start}:d={fade_dur},"
+                   f"fade=t=in:st={cfg.duration}:d={fade_dur}",
+            "-af", f"afade=t=out:st={fade_start}:d={fade_dur},"
+                   f"afade=t=in:st={cfg.duration}:d={fade_dur}",
             "-c:v", "libx264", "-preset", "fast",
             "-c:a", "aac", "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             output_path,
-        ], "конкатенация с фейдом")
+        ], "применение фейда на стыке")
     else:
         # Резкий переход — простая конкатенация
         run_cmd([

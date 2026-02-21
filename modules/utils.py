@@ -35,6 +35,19 @@ def probe_video(ffprobe_path: str, input_path: str) -> dict:
     return json.loads(result.stdout)
 
 
+def _parse_duration(value) -> float:
+    """Безопасный парсинг duration — обрабатывает None, 'N/A', '0', пустые строки."""
+    if value is None:
+        return 0.0
+    s = str(value).strip()
+    if not s or s.lower() == "n/a":
+        return 0.0
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def get_video_info(ffprobe_path: str, input_path: str) -> dict:
     """Извлечь основные параметры видео: ширина, высота, fps, длительность, кодек аудио."""
     probe = probe_video(ffprobe_path, input_path)
@@ -55,16 +68,46 @@ def get_video_info(ffprobe_path: str, input_path: str) -> dict:
     num, den = map(int, r_frame_rate.split("/"))
     fps = num / den if den else 30.0
 
-    # Длительность
-    duration = float(
-        video_stream.get("duration")
-        or probe.get("format", {}).get("duration", "0")
-    )
+    # Длительность — пробуем несколько источников, берём максимальное положительное
+    dur_candidates = [
+        _parse_duration(video_stream.get("duration")),
+        _parse_duration(probe.get("format", {}).get("duration")),
+    ]
+    # nb_frames / fps как запасной вариант
+    nb_frames = _parse_duration(video_stream.get("nb_frames"))
+    if nb_frames > 0 and fps > 0:
+        dur_candidates.append(nb_frames / fps)
+
+    duration = max(dur_candidates) if dur_candidates else 0.0
+
+    if duration <= 0:
+        # Последний fallback: подсчёт кадров через ffprobe
+        logger.warning("Не удалось определить длительность из метаданных, "
+                       "пробуем count_frames для %s", input_path)
+        try:
+            result = run_cmd([
+                ffprobe_path, "-v", "error",
+                "-count_frames",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=nb_read_frames",
+                "-of", "csv=p=0",
+                input_path,
+            ], "ffprobe count_frames")
+            counted = _parse_duration(result.stdout.strip())
+            if counted > 0 and fps > 0:
+                duration = counted / fps
+        except RuntimeError:
+            pass
 
     # Аудио битрейт
     audio_bitrate = None
     if audio_stream:
-        audio_bitrate = int(audio_stream.get("bit_rate", 0)) // 1000  # kbps
+        raw_br = audio_stream.get("bit_rate")
+        if raw_br and str(raw_br).lower() != "n/a":
+            try:
+                audio_bitrate = int(raw_br) // 1000  # kbps
+            except (ValueError, TypeError):
+                audio_bitrate = None
 
     return {
         "width": int(video_stream["width"]),

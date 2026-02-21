@@ -111,6 +111,9 @@ def process(
     # Строим filter_complex
     parts = []
 
+    # Длительность с запасом — color source должен быть >= длины видео
+    safe_duration = duration + 10
+
     if bg_input_idx:
         parts.append(
             f"[{bg_input_idx}:v]scale={out_w}:{out_h}:"
@@ -119,7 +122,7 @@ def process(
         )
     else:
         parts.append(
-            f"color=c=0x404040:s={out_w}x{out_h}:r={fps}:d={duration}[bg]"
+            f"color=c=0x404040:s={out_w}x{out_h}:r={fps}:d={safe_duration}[bg]"
         )
 
     # Масштабирование основного видео
@@ -128,10 +131,11 @@ def process(
         f"force_original_aspect_ratio=decrease[main]"
     )
 
-    # Наложение основного видео на фон
+    # Наложение основного видео на фон — eof_action=endall завершает
+    # когда заканчивается основное видео (а не фон)
     parts.append(
         f"[bg][main]overlay=x={overlay_x}:y={overlay_y}:"
-        f"shortest=1[composed]"
+        f"eof_action=endall[composed]"
     )
 
     # Генерация динамического шума и наложение с прозрачностью
