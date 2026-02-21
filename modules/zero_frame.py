@@ -31,93 +31,103 @@ def process(
     info = get_video_info(ffprobe, input_path)
     w, h, fps = info["width"], info["height"], info["fps"]
 
+    fade_dur = min(cfg.fade_duration, cfg.duration) if cfg.transition == "fade" else 0
+
     # --- Генерация нулевого сегмента ---
     zero_segment = os.path.join(temp_dir, "_zero_segment.mp4")
 
+    # VF-фильтр: fade-out в конце сегмента (если плавный переход)
+    vf_zero = ""
+    af_zero = ""
+    if fade_dur > 0:
+        fade_start = max(cfg.duration - fade_dur, 0)
+        vf_zero = f"-vf,fade=t=out:st={fade_start}:d={fade_dur}"
+        af_zero = f"-af,afade=t=out:st={fade_start}:d={fade_dur}"
+
     if cfg.mode == "gray":
-        # Серый кадр #808080
-        run_cmd([
+        cmd = [
             ffmpeg, "-y",
             "-f", "lavfi",
             "-i", f"color=c=0x808080:s={w}x{h}:d={cfg.duration}:r={fps}",
             "-f", "lavfi",
-            "-i", f"anullsrc=r=44100:cl=stereo",
+            "-i", "anullsrc=r=44100:cl=stereo",
             "-t", str(cfg.duration),
+        ]
+        if fade_dur > 0:
+            cmd.extend(["-vf", f"fade=t=out:st={max(cfg.duration - fade_dur, 0)}:d={fade_dur}"])
+            cmd.extend(["-af", f"afade=t=out:st={max(cfg.duration - fade_dur, 0)}:d={fade_dur}"])
+        cmd.extend([
             "-c:v", "libx264", "-preset", "fast",
             "-c:a", "aac", "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             zero_segment,
-        ], "генерация серого кадра")
+        ])
+        run_cmd(cmd, "генерация серого кадра")
+
     elif cfg.mode == "image":
         if not cfg.image_path or not os.path.isfile(cfg.image_path):
             raise FileNotFoundError(
                 f"Изображение для нулевого кадра не найдено: {cfg.image_path}"
             )
-        run_cmd([
+        scale_filter = (
+            f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black"
+        )
+        if fade_dur > 0:
+            scale_filter += f",fade=t=out:st={max(cfg.duration - fade_dur, 0)}:d={fade_dur}"
+
+        cmd = [
             ffmpeg, "-y",
             "-loop", "1", "-i", cfg.image_path,
             "-f", "lavfi",
-            "-i", f"anullsrc=r=44100:cl=stereo",
+            "-i", "anullsrc=r=44100:cl=stereo",
             "-t", str(cfg.duration),
-            "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,"
-                   f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black",
+            "-vf", scale_filter,
+        ]
+        if fade_dur > 0:
+            cmd.extend(["-af", f"afade=t=out:st={max(cfg.duration - fade_dur, 0)}:d={fade_dur}"])
+        cmd.extend([
             "-c:v", "libx264", "-preset", "fast",
             "-c:a", "aac", "-b:a", "128k",
             "-pix_fmt", "yuv420p",
             "-r", str(fps),
             zero_segment,
-        ], "генерация кадра из изображения")
+        ])
+        run_cmd(cmd, "генерация кадра из изображения")
     else:
         raise ValueError(f"Неизвестный режим нулевого кадра: {cfg.mode}")
+
+    # --- Подготовка основного видео (fade-in в начале, если плавный переход) ---
+    if fade_dur > 0:
+        video_prepared = os.path.join(temp_dir, "_video_fadein.mp4")
+        run_cmd([
+            ffmpeg, "-y",
+            "-i", input_path,
+            "-vf", f"fade=t=in:st=0:d={fade_dur}",
+            "-af", f"afade=t=in:st=0:d={fade_dur}",
+            "-c:v", "libx264", "-preset", "fast",
+            "-c:a", "aac", "-b:a", "128k",
+            "-pix_fmt", "yuv420p",
+            video_prepared,
+        ], "fade-in основного видео")
+    else:
+        video_prepared = input_path
 
     # --- Конкатенация ---
     concat_list = os.path.join(temp_dir, "_concat_list.txt")
     with open(concat_list, "w") as f:
         f.write(f"file '{zero_segment}'\n")
-        f.write(f"file '{input_path}'\n")
+        f.write(f"file '{video_prepared}'\n")
 
-    if cfg.transition == "fade":
-        # Конкатенация с плавным переходом:
-        # Сначала конкатенируем через concat demuxer, затем fade-in на стыке
-        fade_dur = min(cfg.fade_duration, cfg.duration)
-        concat_raw = os.path.join(temp_dir, "_concat_raw.mp4")
-
-        # Шаг 1: простая конкатенация
-        run_cmd([
-            ffmpeg, "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_list,
-            "-c:v", "libx264", "-preset", "fast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-pix_fmt", "yuv420p",
-            concat_raw,
-        ], "конкатенация для фейда")
-
-        # Шаг 2: fade-out на нулевом сегменте + fade-in на стыке
-        fade_start = max(cfg.duration - fade_dur, 0)
-        run_cmd([
-            ffmpeg, "-y",
-            "-i", concat_raw,
-            "-vf", f"fade=t=out:st={fade_start}:d={fade_dur},"
-                   f"fade=t=in:st={cfg.duration}:d={fade_dur}",
-            "-af", f"afade=t=out:st={fade_start}:d={fade_dur},"
-                   f"afade=t=in:st={cfg.duration}:d={fade_dur}",
-            "-c:v", "libx264", "-preset", "fast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-pix_fmt", "yuv420p",
-            output_path,
-        ], "применение фейда на стыке")
-    else:
-        # Резкий переход — простая конкатенация
-        run_cmd([
-            ffmpeg, "-y",
-            "-f", "concat", "-safe", "0",
-            "-i", concat_list,
-            "-c:v", "libx264", "-preset", "fast",
-            "-c:a", "aac", "-b:a", "128k",
-            "-pix_fmt", "yuv420p",
-            output_path,
-        ], "конкатенация с резким переходом")
+    run_cmd([
+        ffmpeg, "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", concat_list,
+        "-c:v", "libx264", "-preset", "fast",
+        "-c:a", "aac", "-b:a", "128k",
+        "-pix_fmt", "yuv420p",
+        output_path,
+    ], "конкатенация сегментов")
 
     logger.info("Нулевой кадр добавлен: %s", output_path)
     return output_path
