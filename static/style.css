@@ -536,6 +536,44 @@ input[type="file"]::file-selector-button {
     word-break: break-all;
 }
 
+/* ---- Preset grid ---- */
+.preset-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.preset-option {
+    cursor: pointer;
+}
+.preset-option input[type="radio"] {
+    display: none;
+}
+.preset-card {
+    padding: 14px 18px;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    transition: border-color 0.2s, background 0.2s;
+}
+.preset-card strong {
+    display: block;
+    color: var(--text-heading);
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.preset-card p {
+    color: var(--text-dim);
+    font-size: 0.82rem;
+    margin: 0;
+}
+.preset-option input[type="radio"]:checked + .preset-card {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+}
+.preset-option input[type="radio"]:checked + .preset-card strong {
+    color: var(--accent);
+}
+
 /* ---- Responsive ---- */
 @media (max-width: 600px) {
     .container { padding: 16px 10px 40px; }

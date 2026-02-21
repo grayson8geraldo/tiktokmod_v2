@@ -48,35 +48,77 @@
         </section>
 
         <!-- ============================================================ -->
-        <!-- Модуль 1: Нулевой кадр                                       -->
+        <!-- Режим работы (Preset)                                        -->
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
-                <label class="toggle">
-                    <input type="checkbox" name="zf_enabled" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <h2>1. Нулевой кадр</h2>
-                <span class="badge">Подготовка</span>
+                <h2>Режим обработки</h2>
+                <span class="badge">Preset</span>
             </div>
             <div class="card-body">
-                <p class="desc">Вставка технического сегмента в начало таймлайна.</p>
+                <div class="preset-grid">
+                    <label class="preset-option">
+                        <input type="radio" name="preset" value="gray_image_flicker" checked>
+                        <div class="preset-card">
+                            <strong>Серый + Картинка + Мерцание</strong>
+                            <p>0.3с серый → 0.7с картинка → видео с мерцанием на подложке</p>
+                        </div>
+                    </label>
+                    <label class="preset-option">
+                        <input type="radio" name="preset" value="gray_flicker">
+                        <div class="preset-card">
+                            <strong>Серый + Мерцание</strong>
+                            <p>1с серый → видео с мерцанием (без подложки)</p>
+                        </div>
+                    </label>
+                    <label class="preset-option">
+                        <input type="radio" name="preset" value="image_video">
+                        <div class="preset-card">
+                            <strong>Картинка + Видео</strong>
+                            <p>0.3–1с картинка → видео на подложке (без мерцания)</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </section>
 
+        <!-- ============================================================ -->
+        <!-- Изображение (для подложки и вступления)                      -->
+        <!-- ============================================================ -->
+        <section class="card" id="imageSection">
+            <div class="card-header">
+                <h2>Изображение</h2>
+                <span class="badge">Подложка / Вступление</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Используется как вступительный сегмент и как фоновая подложка под видео.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Режим</label>
-                        <select name="zf_mode" id="zfMode">
-                            <option value="gray" selected>Серый кадр (#808080)</option>
-                            <option value="image">Произвольное изображение</option>
-                        </select>
+                        <label>Изображение</label>
+                        <input type="file" name="background_image" accept="image/*">
                     </div>
                     <div class="form-group">
-                        <label>Длительность (сек)</label>
-                        <input type="number" name="zf_duration" value="0.5" min="0.1" max="1.5" step="0.1">
+                        <label>Длительность картинки (сек)</label>
+                        <input type="number" name="img_duration" value="0.7" min="0.3" max="2.0" step="0.1">
                     </div>
                 </div>
+            </div>
+        </section>
 
+        <!-- ============================================================ -->
+        <!-- Вступление (серый сегмент)                                   -->
+        <!-- ============================================================ -->
+        <section class="card" id="graySection">
+            <div class="card-header">
+                <h2>Серый сегмент</h2>
+                <span class="badge">Вступление</span>
+            </div>
+            <div class="card-body">
                 <div class="form-row">
+                    <div class="form-group">
+                        <label>Длительность (сек)</label>
+                        <input type="number" name="zf_gray_duration" value="0.3" min="0.1" max="2.0" step="0.1">
+                    </div>
                     <div class="form-group">
                         <label>Переход</label>
                         <select name="zf_transition">
@@ -86,34 +128,22 @@
                     </div>
                     <div class="form-group">
                         <label>Длительность фейда (сек)</label>
-                        <input type="number" name="zf_fade_duration" value="0.3" min="0.1" max="1.0" step="0.1">
-                    </div>
-                </div>
-
-                <div class="form-row" id="zfImageRow" style="display:none">
-                    <div class="form-group full">
-                        <label>Изображение для нулевого кадра</label>
-                        <input type="file" name="zf_image" accept="image/*">
+                        <input type="number" name="zf_fade_duration" value="0.2" min="0.05" max="1.0" step="0.05">
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- ============================================================ -->
-        <!-- Модуль 2: Матрёшка                                           -->
+        <!-- Матрёшка (визуальные слои)                                   -->
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
-                <label class="toggle">
-                    <input type="checkbox" name="mt_enabled" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <h2>2. Визуальная Матрёшка</h2>
+                <h2>Визуальная матрёшка</h2>
                 <span class="badge">Слои</span>
             </div>
             <div class="card-body">
-                <p class="desc">Трёхслойная композиция: подложка + основное видео + динамический шум.</p>
-
+                <p class="desc">Подложка + масштабированное видео + шум.</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Ширина (px)</label>
@@ -124,7 +154,6 @@
                         <input type="number" name="mt_height" value="1920" min="640" max="3840" step="2">
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Масштаб видео</label>
@@ -139,7 +168,6 @@
                         <input type="number" name="mt_jitter" value="3" min="0" max="20">
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Прозрачность шума</label>
@@ -149,51 +177,61 @@
                             <span class="range-val" id="mtNoiseVal">0.02</span>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Фоновое изображение</label>
-                        <input type="file" name="mt_background" accept="image/*">
-                    </div>
                 </div>
             </div>
         </section>
 
         <!-- ============================================================ -->
-        <!-- Модуль 3: Мерцание                                           -->
+        <!-- Мерцание                                                     -->
         <!-- ============================================================ -->
-        <section class="card">
+        <section class="card" id="flickerSection">
             <div class="card-header">
-                <label class="toggle">
-                    <input type="checkbox" name="fl_enabled" checked>
-                    <span class="toggle-slider"></span>
-                </label>
-                <h2>3. Кадровое мерцание</h2>
-                <span class="badge">Interleaving</span>
+                <h2>Кадровое мерцание</h2>
+                <span class="badge">Flicker</span>
             </div>
             <div class="card-body">
-                <p class="desc">Чередование кадров видео с чёрными кадрами + сдвиг фазы для рассинхронизации.</p>
-
+                <p class="desc">Мягкое мерцание: alpha-blending (тёмные кадры сохраняют видимость) + motion blur для сглаживания. Применяется только к видео, подложка остаётся стабильной.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Чередование каждые N кадров</label>
-                        <input type="number" name="fl_interleave" value="2" min="2" max="10">
+                        <label>Видимых кадров</label>
+                        <input type="number" name="fl_visible" value="2" min="1" max="10">
                     </div>
+                    <div class="form-group">
+                        <label>Тёмных кадров</label>
+                        <input type="number" name="fl_dark" value="1" min="1" max="5">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Видимость на тёмных кадрах</label>
+                        <div class="range-wrap">
+                            <input type="range" name="fl_opacity" value="0.18" min="0.05" max="0.50" step="0.01"
+                                   id="flOpacity" oninput="document.getElementById('flOpacityVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="flOpacityVal">18%</span>
+                        </div>
+                    </div>
+                    <div class="form-group" style="display:flex;align-items:center;padding-top:1.5em">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="fl_blur" checked>
+                            Motion Blur (tblend)
+                        </label>
+                    </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label>Интервал сдвига фазы (сек)</label>
                         <input type="number" name="fl_phase_interval" value="2.0" min="0.5" max="10" step="0.5">
                     </div>
-                </div>
-
-                <div class="form-row">
                     <div class="form-group">
-                        <label>Чёрных кадров при паузе</label>
-                        <input type="number" name="fl_black_frames" value="3" min="1" max="10">
+                        <label>Тёмных кадров при паузе</label>
+                        <input type="number" name="fl_phase_dark" value="3" min="1" max="10">
                     </div>
                 </div>
             </div>
         </section>
 
         <!-- ============================================================ -->
-        <!-- Модуль 4: Цифровое ДНК                                       -->
+        <!-- Цифровое ДНК                                                 -->
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
@@ -201,12 +239,11 @@
                     <input type="checkbox" name="dd_enabled" checked>
                     <span class="toggle-slider"></span>
                 </label>
-                <h2>4. Цифровое ДНК</h2>
+                <h2>Цифровое ДНК</h2>
                 <span class="badge">Уникализация</span>
             </div>
             <div class="card-body">
-                <p class="desc">Очистка метаданных, инъекция фейковых данных, микро-обрезка, изменение битрейта.</p>
-
+                <p class="desc">Очистка метаданных, инъекция фейковых данных, микро-обрезка.</p>
                 <div class="form-row checkboxes">
                     <label class="checkbox-label">
                         <input type="checkbox" name="dd_strip_meta" checked>
@@ -221,7 +258,6 @@
                         Горизонтальный флип
                     </label>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Обрезка хвоста (мин. кадров)</label>
@@ -232,7 +268,6 @@
                         <input type="number" name="dd_trim_max" value="5" min="1" max="20">
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Сдвиг битрейта аудио (кбит/с)</label>
@@ -243,7 +278,7 @@
         </section>
 
         <!-- ============================================================ -->
-        <!-- Модуль 5: Аудио                                              -->
+        <!-- Аудио                                                        -->
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
@@ -251,12 +286,11 @@
                     <input type="checkbox" name="au_enabled" checked>
                     <span class="toggle-slider"></span>
                 </label>
-                <h2>5. Аудио-модуль</h2>
+                <h2>Аудио-модуль</h2>
                 <span class="badge">Звук</span>
             </div>
             <div class="card-body">
-                <p class="desc">Pitch shift голоса/музыки и наложение розового шума для изменения спектрограммы.</p>
-
+                <p class="desc">Pitch shift и розовый шум для изменения спектрограммы.</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Pitch shift (полутоны)</label>
@@ -275,7 +309,6 @@
                         </select>
                     </div>
                 </div>
-
                 <div class="form-row">
                     <div class="form-group">
                         <label>Громкость розового шума (дБ)</label>
@@ -302,7 +335,7 @@
 </div>
 
 <script>
-// Drag & drop и превью файла
+// Drag & drop
 const dropZone = document.getElementById('dropZone');
 const videoInput = document.getElementById('videoInput');
 const placeholder = document.getElementById('uploadPlaceholder');
@@ -318,42 +351,50 @@ function showFile(file) {
     placeholder.style.display = 'none';
     preview.style.display = 'flex';
 }
-
 function clearFile() {
     videoInput.value = '';
     placeholder.style.display = '';
     preview.style.display = 'none';
 }
-
 videoInput.addEventListener('change', function() {
     if (this.files.length) showFile(this.files[0]);
 });
-
 clearBtn.addEventListener('click', clearFile);
-
 dropZone.addEventListener('dragover', function(e) {
-    e.preventDefault();
-    this.classList.add('drag-over');
+    e.preventDefault(); this.classList.add('drag-over');
 });
-
 dropZone.addEventListener('dragleave', function() {
     this.classList.remove('drag-over');
 });
-
 dropZone.addEventListener('drop', function(e) {
-    e.preventDefault();
-    this.classList.remove('drag-over');
+    e.preventDefault(); this.classList.remove('drag-over');
     if (e.dataTransfer.files.length) {
         videoInput.files = e.dataTransfer.files;
         showFile(e.dataTransfer.files[0]);
     }
 });
 
-// Показ/скрытие поля изображения для нулевого кадра
-document.getElementById('zfMode').addEventListener('change', function() {
-    document.getElementById('zfImageRow').style.display =
-        this.value === 'image' ? '' : 'none';
+// Показ/скрытие секций в зависимости от режима
+function updateSections() {
+    const preset = document.querySelector('input[name="preset"]:checked').value;
+    const imageSection = document.getElementById('imageSection');
+    const graySection = document.getElementById('graySection');
+    const flickerSection = document.getElementById('flickerSection');
+
+    // Показываем секции по режиму
+    const needImage = (preset === 'gray_image_flicker' || preset === 'image_video');
+    const needGray = (preset === 'gray_image_flicker' || preset === 'gray_flicker');
+    const needFlicker = (preset === 'gray_image_flicker' || preset === 'gray_flicker');
+
+    imageSection.style.display = needImage ? '' : 'none';
+    graySection.style.display = needGray ? '' : 'none';
+    flickerSection.style.display = needFlicker ? '' : 'none';
+}
+
+document.querySelectorAll('input[name="preset"]').forEach(function(radio) {
+    radio.addEventListener('change', updateSections);
 });
+updateSections();
 
 // Блокировка кнопки при отправке
 document.getElementById('mainForm').addEventListener('submit', function() {
