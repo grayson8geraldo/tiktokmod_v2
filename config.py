@@ -31,17 +31,27 @@ class ImageIntroConfig:
 
 @dataclass
 class FlickerConfig:
-    """Кадровое мерцание (alpha-blending + motion blur)."""
-    # Паттерн: кол-во видимых кадров и кол-во затемнённых кадров
-    visible_frames: int = 2
-    dark_frames: int = 1
-    # Alpha-blending: видимость видео на «тёмных» кадрах (0.0 = полностью чёрный, 1.0 = полностью видно)
-    dark_opacity: float = 0.18
+    """Кадровое мерцание (overlay с переменной прозрачностью + рандомизация).
+
+    Вместо жёсткого select/drawbox — overlay чёрного слоя с sin/cos
+    модуляцией прозрачности. Интервалы и длительности рандомизированы,
+    чтобы каждое видео имело уникальную структуру таймлайна.
+    """
+    # Диапазон прозрачности чёрного оверлея на «тёмных» кадрах.
+    # alpha_min=0.7, alpha_max=0.9 → видимость видео 10-30%
+    alpha_min: float = 0.7
+    alpha_max: float = 0.9
+
+    # Интервал между пачками тёмных кадров (сек, рандомизируется)
+    burst_interval_min: float = 1.8
+    burst_interval_max: float = 2.4
+
+    # Длительность пачки тёмных кадров (рандомизируется)
+    burst_frames_min: int = 2
+    burst_frames_max: int = 4
+
     # Motion blur: tblend для сглаживания стыков (True/False)
     motion_blur: bool = True
-    # Сдвиг фазы: каждые N сек — пачка тёмных кадров
-    phase_shift_interval: float = 2.0
-    phase_shift_dark_frames: int = 3
 
 
 @dataclass
@@ -67,6 +77,14 @@ class DigitalDNAConfig:
     trim_tail_frames_max: int = 5
     audio_bitrate_shift_kbps: int = 1
     horizontal_flip: bool = False
+
+    # --- Dirty Encode: полезный шум для антидетекции ---
+    # FPS Jitter: случайное отклонение fps (29.976, 30.012 и т.д.)
+    fps_jitter: bool = True
+    fps_jitter_range: float = 0.05  # ±0.05 от оригинала
+
+    # Audio Drift: микро-сдвиг аудио относительно видео (мс)
+    audio_drift_max_ms: float = 1.0
 
 
 @dataclass

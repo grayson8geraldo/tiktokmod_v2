@@ -169,7 +169,28 @@ def process(
     if cfg.horizontal_flip:
         vf_filters.append("hflip")
 
+    # --- 3. FPS Jitter (Dirty Encode) ---
+    # Реальные камеры дают не ровно 30.0, а 29.976 или 30.012
+    # Случайное отклонение fps ломает «стерильный» отпечаток софта
+    jittered_fps = None
+    if cfg.fps_jitter:
+        jitter = random.uniform(-cfg.fps_jitter_range, cfg.fps_jitter_range)
+        jittered_fps = round(fps + jitter, 3)
+        logger.info("FPS Jitter: %.3f → %.3f (сдвиг %+.3f)", fps, jittered_fps, jitter)
+
     vf_str = ",".join(vf_filters) if vf_filters else None
+
+    # --- 4. Audio Drift (Dirty Encode) ---
+    # Смещение аудио на 0.5–1.0 мс — незаметно для человека,
+    # но ломает математическую синхронность программного кодирования
+    af_filters = []
+    if cfg.audio_drift_max_ms > 0 and info["has_audio"]:
+        drift_ms = random.uniform(cfg.audio_drift_max_ms * 0.5, cfg.audio_drift_max_ms)
+        # adelay в мс, all=1 — применить ко всем каналам
+        af_filters.append(f"adelay={drift_ms:.1f}:all=1")
+        logger.info("Audio Drift: +%.1f мс", drift_ms)
+
+    af_str = ",".join(af_filters) if af_filters else None
 
     cmd = [
         ffmpeg, "-y",
@@ -178,8 +199,14 @@ def process(
     ]
     if vf_str:
         cmd.extend(["-vf", vf_str])
+    if af_str:
+        cmd.extend(["-af", af_str])
 
-    # --- 3. Изменение битрейта аудио ---
+    # FPS jitter: принудительная установка нового fps
+    if jittered_fps:
+        cmd.extend(["-r", str(jittered_fps)])
+
+    # --- 5. Изменение битрейта аудио ---
     if info["has_audio"] and info["audio_bitrate_kbps"]:
         shift = random.choice([-1, 1]) * cfg.audio_bitrate_shift_kbps
         new_audio_br = max(info["audio_bitrate_kbps"] + shift, 32)
@@ -187,10 +214,10 @@ def process(
         cmd.extend(["-c:a", "aac", "-b:a", f"{new_audio_br}k"])
     else:
         cmd.extend(["-c:v", "libx264", "-preset", "fast"])
-        cmd.extend(["-c:a", "copy"])
+        cmd.extend(["-c:a", "aac", "-b:a", "128k"])
 
     cmd.extend(["-pix_fmt", "yuv420p", step_output])
-    run_cmd(cmd, "микро-обрезка + флип + битрейт аудио")
+    run_cmd(cmd, "микро-обрезка + флип + dirty encode")
 
     current_input = step_output
 

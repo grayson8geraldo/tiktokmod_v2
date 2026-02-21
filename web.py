@@ -95,12 +95,13 @@ def _build_config_from_form(form: dict) -> PipelineConfig:
     cfg.matryoshka.noise_opacity = float(form.get("mt_noise", 0.02))
 
     # --- Flicker ---
-    cfg.flicker.visible_frames = int(form.get("fl_visible", 2))
-    cfg.flicker.dark_frames = int(form.get("fl_dark", 1))
-    cfg.flicker.dark_opacity = float(form.get("fl_opacity", 0.18))
+    cfg.flicker.alpha_min = float(form.get("fl_alpha_min", 0.7))
+    cfg.flicker.alpha_max = float(form.get("fl_alpha_max", 0.9))
+    cfg.flicker.burst_interval_min = float(form.get("fl_burst_int_min", 1.8))
+    cfg.flicker.burst_interval_max = float(form.get("fl_burst_int_max", 2.4))
+    cfg.flicker.burst_frames_min = int(form.get("fl_burst_fr_min", 2))
+    cfg.flicker.burst_frames_max = int(form.get("fl_burst_fr_max", 4))
     cfg.flicker.motion_blur = form.get("fl_blur") == "on"
-    cfg.flicker.phase_shift_interval = float(form.get("fl_phase_interval", 2.0))
-    cfg.flicker.phase_shift_dark_frames = int(form.get("fl_phase_dark", 3))
 
     # --- Digital DNA ---
     cfg.digital_dna.enabled = form.get("dd_enabled") == "on"
@@ -110,6 +111,11 @@ def _build_config_from_form(form: dict) -> PipelineConfig:
     cfg.digital_dna.trim_tail_frames_max = int(form.get("dd_trim_max", 5))
     cfg.digital_dna.audio_bitrate_shift_kbps = int(form.get("dd_bitrate_shift", 1))
     cfg.digital_dna.horizontal_flip = form.get("dd_flip") == "on"
+
+    # --- Dirty Encode ---
+    cfg.digital_dna.fps_jitter = form.get("dd_fps_jitter") == "on"
+    cfg.digital_dna.fps_jitter_range = float(form.get("dd_fps_range", 0.05))
+    cfg.digital_dna.audio_drift_max_ms = float(form.get("dd_audio_drift", 1.0))
 
     # --- Audio ---
     cfg.audio.enabled = form.get("au_enabled") == "on"

@@ -1,11 +1,17 @@
 """
-Модуль: Кадровое мерцание (Flicker).
+Модуль: Кадровое мерцание (Flicker) v2.
 
-Мягкое мерцание для обхода детекции при сохранении смотрибельности:
-  - Alpha-blending: тёмные кадры сохраняют 15-20% видимости (не 100% чёрный)
-  - Motion blur: tblend сглаживает стыки между кадрами
-  - Паттерн 2-1-2: 2 видимых → 1 тёмный → 2 видимых (вместо 1:1)
-  - Сдвиг фазы: пачка тёмных кадров каждые N секунд
+Принципиальные отличия от v1:
+  1. Overlay с переменной прозрачностью вместо drawbox.
+     Чёрный слой с alpha, модулированным sin(), оставляет 10-30%
+     видимости видео — мягче для модерации.
+
+  2. Рандомизация «битых тактов».
+     Интервал между пачками: случайный (1.8–2.4 сек).
+     Длительность пачки: случайная (2–4 кадра).
+     Каждое видео — уникальная структура таймлайна.
+
+  3. Motion blur (tblend) для сглаживания стыков.
 
 Этот модуль генерирует FFmpeg filter фрагмент для применения
 к видеопотоку. Может использоваться как самостоятельно, так и встроенным
@@ -13,6 +19,7 @@
 """
 
 import logging
+import random
 
 from config import FlickerConfig
 from modules.utils import run_cmd, get_video_info
@@ -20,59 +27,123 @@ from modules.utils import run_cmd, get_video_info
 logger = logging.getLogger(__name__)
 
 
-def build_flicker_filters(cfg: FlickerConfig, fps: float,
-                          input_label: str = "[0:v]",
-                          output_label: str = "[flickered]") -> str:
+def _generate_burst_schedule(
+    duration: float, fps: float, cfg: FlickerConfig,
+) -> list[tuple[int, int]]:
     """
-    Строит цепочку FFmpeg-фильтров для мерцания.
+    Предварительно вычисляет рандомизированное расписание пачек затемнения.
 
-    Использует drawbox с альфа-каналом (color=black@ALPHA) для мягкого
-    затемнения, а не полностью чёрный кадр. Затем tblend для motion blur.
-
-    Паттерн: visible_frames видимых, затем dark_frames затемнённых.
-    На затемнённых кадрах видео видно на dark_opacity (0.18 = 18%).
+    Возвращает список (start_frame, end_frame) — включительно.
+    Интервалы и длительности рандомизированы, так что каждый вызов
+    даёт уникальную структуру таймлайна.
     """
-    vis = cfg.visible_frames     # 2
-    dark = cfg.dark_frames       # 1
-    cycle = vis + dark           # 3
-    opacity = cfg.dark_opacity   # 0.18
-    # Прозрачность чёрного = 1 - opacity (0.82 = 82% чёрного, 18% видео)
-    black_alpha = 1.0 - opacity
+    schedule = []
+    total_frames = int(duration * fps)
+    current_frame = 0
 
-    phase_interval_frames = int(fps * cfg.phase_shift_interval)
-    burst = cfg.phase_shift_dark_frames
+    while current_frame < total_frames:
+        # Случайный интервал до следующей пачки
+        interval_sec = random.uniform(cfg.burst_interval_min, cfg.burst_interval_max)
+        current_frame += int(interval_sec * fps)
 
-    # --- Условие затемнения ---
-    # Кадр n затемняется если:
-    #   1) mod(n, cycle) >= visible_frames  (паттерн 2-1-2)
-    #   2) mod(n, phase_interval) < burst   (пачка тёмных на сдвиге фазы)
-    cond_pattern = f"gte(mod(n\\,{cycle})\\,{vis})"
-    cond_phase = f"lt(mod(n\\,{phase_interval_frames})\\,{burst})"
+        if current_frame >= total_frames:
+            break
 
-    # Объединяем: затемнить если ЛЮБОЕ условие истинно
-    enable_expr = f"'{cond_pattern}+{cond_phase}'"
+        # Случайная длительность пачки
+        burst_len = random.randint(cfg.burst_frames_min, cfg.burst_frames_max)
+        end_frame = min(current_frame + burst_len - 1, total_frames - 1)
 
-    # --- drawbox с альфа-каналом ---
-    # color=black@0.82 = 82% непрозрачный чёрный → 18% оригинала видно
-    drawbox_filter = (
-        f"drawbox=x=0:y=0:w=iw:h=ih:"
-        f"color=black@{black_alpha:.2f}:t=fill:"
-        f"enable={enable_expr}"
-    )
+        schedule.append((current_frame, end_frame))
+        current_frame = end_frame + 1
 
-    # --- Сборка цепочки ---
+    return schedule
+
+
+def build_flicker_filters(
+    cfg: FlickerConfig,
+    fps: float,
+    duration: float,
+    width: int,
+    height: int,
+    input_label: str = "[0:v]",
+    output_label: str = "[flickered]",
+) -> str:
+    """
+    Строит цепочку FFmpeg-фильтров для мерцания с overlay.
+
+    Подход:
+      1. Генерируем маленький (4x4) чёрный источник с альфа-каналом.
+      2. geq задаёт alpha с sin-модуляцией (0 вне пачек, 0.7–0.9 внутри).
+      3. Масштабируем до размеров видео (nearest neighbor — быстро).
+      4. overlay на исходное видео.
+      5. Опционально tblend для motion blur.
+
+    Рандомизация:
+      Расписание пачек вычисляется заранее в Python (random),
+      а в FFmpeg передаётся как серия between(n,start,end).
+    """
+    schedule = _generate_burst_schedule(duration, fps, cfg)
+
+    if not schedule:
+        logger.warning("Расписание мерцания пустое (видео слишком короткое?)")
+        return f"{input_label}null{output_label}"
+
+    # --- Условие: «мы внутри какой-либо пачки» ---
+    # Собираем OR из between(n,start,end) — n это номер кадра
+    conditions = [f"between(n\\,{s}\\,{e})" for s, e in schedule]
+    is_dark_expr = "+".join(conditions)
+
+    # --- Alpha с sin-модуляцией ---
+    # Прозрачность чёрного плавно гуляет между alpha_min и alpha_max.
+    # sin даёт «дрожание» в пределах пачки, а не резкое включение/выключение.
+    # Период ~0.15 сек — достаточно быстро для видимого «flutter».
+    alpha_mid = (cfg.alpha_min + cfg.alpha_max) / 2
+    alpha_amp = (cfg.alpha_max - cfg.alpha_min) / 2
+    sin_period = 0.15
+
+    # alpha_expr даёт значение 0..1 (доля чёрного)
+    alpha_expr = f"{alpha_mid:.3f}+{alpha_amp:.3f}*sin(2*PI*T/{sin_period:.2f})"
+
+    # В geq: a = 0..255. Внутри пачки = alpha*255, вне = 0 (полностью прозрачный)
+    geq_alpha = f"if({is_dark_expr}\\,255*({alpha_expr})\\,0)"
+
+    safe_dur = duration + 10
+
     parts = []
 
-    # drawbox для alpha-blending
-    parts.append(f"{input_label}{drawbox_filter}[_fl_box]")
+    # 1. Маленький чёрный источник → альфа через geq → масштаб
+    parts.append(
+        f"color=black:s=4x4:r={fps}:d={safe_dur},"
+        f"format=yuva420p,"
+        f"geq=lum=0:cb=128:cr=128:a='{geq_alpha}',"
+        f"scale={width}:{height}:flags=neighbor"
+        f"[_fl_dark]"
+    )
 
-    # tblend для motion blur (сглаживание стыков)
+    # 2. Overlay чёрного слоя на видео
+    parts.append(
+        f"{input_label}[_fl_dark]overlay=format=auto[_fl_ov]"
+    )
+
+    # 3. Motion blur (сглаживание стыков)
     if cfg.motion_blur:
-        parts.append(f"[_fl_box]tblend=all_mode=average{output_label}")
+        parts.append(f"[_fl_ov]tblend=all_mode=average{output_label}")
     else:
-        parts.append(f"[_fl_box]null{output_label}")
+        parts.append(f"[_fl_ov]null{output_label}")
 
-    return ";".join(parts)
+    filter_str = ";".join(parts)
+
+    logger.info(
+        "Мерцание: %d пачек, alpha=%.0f–%.0f%%, burst=%d–%d кадров, "
+        "интервал=%.1f–%.1fс, blur=%s",
+        len(schedule),
+        cfg.alpha_min * 100, cfg.alpha_max * 100,
+        cfg.burst_frames_min, cfg.burst_frames_max,
+        cfg.burst_interval_min, cfg.burst_interval_max,
+        cfg.motion_blur,
+    )
+
+    return filter_str
 
 
 def process(
@@ -88,18 +159,15 @@ def process(
     """
     info = get_video_info(ffprobe, input_path)
     fps = info["fps"]
+    duration = info["duration"]
+    w = info["width"]
+    h = info["height"]
 
     filter_str = build_flicker_filters(
-        cfg, fps,
+        cfg, fps, duration,
+        width=w, height=h,
         input_label="[0:v]",
         output_label="[outv]",
-    )
-
-    logger.info(
-        "Мерцание: паттерн %d/%d, opacity=%.0f%%, blur=%s, phase=%ds/%d",
-        cfg.visible_frames, cfg.dark_frames,
-        cfg.dark_opacity * 100, cfg.motion_blur,
-        cfg.phase_shift_interval, cfg.phase_shift_dark_frames,
     )
 
     run_cmd([

@@ -187,44 +187,54 @@
         <section class="card" id="flickerSection">
             <div class="card-header">
                 <h2>Кадровое мерцание</h2>
-                <span class="badge">Flicker</span>
+                <span class="badge">Flicker v2</span>
             </div>
             <div class="card-body">
-                <p class="desc">Мягкое мерцание: alpha-blending (тёмные кадры сохраняют видимость) + motion blur для сглаживания. Применяется только к видео, подложка остаётся стабильной.</p>
+                <p class="desc">Overlay с переменной прозрачностью (sin-модуляция). Рандомизированные интервалы ломают цифровую подпись — каждое видео уникально по структуре таймлайна.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Видимых кадров</label>
-                        <input type="number" name="fl_visible" value="2" min="1" max="10">
+                        <label>Alpha чёрного (мин.)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="fl_alpha_min" value="0.7" min="0.3" max="0.95" step="0.05"
+                                   id="flAlphaMin" oninput="document.getElementById('flAlphaMinVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="flAlphaMinVal">70%</span>
+                        </div>
                     </div>
                     <div class="form-group">
-                        <label>Тёмных кадров</label>
-                        <input type="number" name="fl_dark" value="1" min="1" max="5">
+                        <label>Alpha чёрного (макс.)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="fl_alpha_max" value="0.9" min="0.5" max="1.0" step="0.05"
+                                   id="flAlphaMax" oninput="document.getElementById('flAlphaMaxVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="flAlphaMaxVal">90%</span>
+                        </div>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Видимость на тёмных кадрах</label>
-                        <div class="range-wrap">
-                            <input type="range" name="fl_opacity" value="0.18" min="0.05" max="0.50" step="0.01"
-                                   id="flOpacity" oninput="document.getElementById('flOpacityVal').textContent=Math.round(this.value*100)+'%'">
-                            <span class="range-val" id="flOpacityVal">18%</span>
-                        </div>
+                        <label>Интервал между пачками (мин. сек)</label>
+                        <input type="number" name="fl_burst_int_min" value="1.8" min="0.5" max="5.0" step="0.1">
                     </div>
-                    <div class="form-group" style="display:flex;align-items:center;padding-top:1.5em">
+                    <div class="form-group">
+                        <label>Интервал между пачками (макс. сек)</label>
+                        <input type="number" name="fl_burst_int_max" value="2.4" min="0.5" max="5.0" step="0.1">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Длительность пачки (мин. кадров)</label>
+                        <input type="number" name="fl_burst_fr_min" value="2" min="1" max="10">
+                    </div>
+                    <div class="form-group">
+                        <label>Длительность пачки (макс. кадров)</label>
+                        <input type="number" name="fl_burst_fr_max" value="4" min="1" max="10">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="display:flex;align-items:center;padding-top:0.5em">
                         <label class="checkbox-label">
                             <input type="checkbox" name="fl_blur" checked>
                             Motion Blur (tblend)
                         </label>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Интервал сдвига фазы (сек)</label>
-                        <input type="number" name="fl_phase_interval" value="2.0" min="0.5" max="10" step="0.5">
-                    </div>
-                    <div class="form-group">
-                        <label>Тёмных кадров при паузе</label>
-                        <input type="number" name="fl_phase_dark" value="3" min="1" max="10">
                     </div>
                 </div>
             </div>
@@ -272,6 +282,25 @@
                     <div class="form-group">
                         <label>Сдвиг битрейта аудио (кбит/с)</label>
                         <input type="number" name="dd_bitrate_shift" value="1" min="1" max="5">
+                    </div>
+                </div>
+
+                <h3 style="margin-top:1.2em;margin-bottom:0.5em;font-size:0.95em;opacity:0.7">Dirty Encode (антидетекция)</h3>
+                <p class="desc">Инъекция «полезного шума» — файл выглядит как записанный камерой, а не софтом.</p>
+                <div class="form-row checkboxes">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="dd_fps_jitter" checked>
+                        FPS Jitter (случайный fps: 29.976, 30.012...)
+                    </label>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>FPS отклонение (±)</label>
+                        <input type="number" name="dd_fps_range" value="0.05" min="0.01" max="0.2" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Audio Drift макс. (мс)</label>
+                        <input type="number" name="dd_audio_drift" value="1.0" min="0" max="5.0" step="0.5">
                     </div>
                 </div>
             </div>

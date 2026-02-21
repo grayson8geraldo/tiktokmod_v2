@@ -84,7 +84,8 @@ def process(
     # Мерцание (если включено) — применяется к [scaled] ДО наложения на подложку
     if flicker_cfg is not None:
         flicker_filter = build_flicker_filters(
-            flicker_cfg, fps,
+            flicker_cfg, fps, duration,
+            width=scaled_w, height=scaled_h,
             input_label="[scaled]",
             output_label="[main]",
         )
