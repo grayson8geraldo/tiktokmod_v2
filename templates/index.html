@@ -48,87 +48,113 @@
         </section>
 
         <!-- ============================================================ -->
-        <!-- Режим работы (Preset)                                        -->
+        <!-- Якорь (Semantic Anchoring)                                    -->
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
-                <h2>Режим обработки</h2>
-                <span class="badge">Preset</span>
+                <h2>Контекстный якорь</h2>
+                <span class="badge">Anchor</span>
             </div>
             <div class="card-body">
-                <div class="preset-grid">
-                    <label class="preset-option">
-                        <input type="radio" name="preset" value="gray_image_flicker" checked>
-                        <div class="preset-card">
-                            <strong>Серый + Картинка + Мерцание</strong>
-                            <p>0.3с серый → 0.7с картинка → видео с мерцанием на подложке</p>
-                        </div>
-                    </label>
-                    <label class="preset-option">
-                        <input type="radio" name="preset" value="gray_flicker">
-                        <div class="preset-card">
-                            <strong>Серый + Мерцание</strong>
-                            <p>1с серый → видео с мерцанием (без подложки)</p>
-                        </div>
-                    </label>
-                    <label class="preset-option">
-                        <input type="radio" name="preset" value="image_video">
-                        <div class="preset-card">
-                            <strong>Картинка + Видео</strong>
-                            <p>0.3–1с картинка → видео на подложке (без мерцания)</p>
-                        </div>
-                    </label>
-                </div>
-            </div>
-        </section>
-
-        <!-- ============================================================ -->
-        <!-- Изображение (для подложки и вступления)                      -->
-        <!-- ============================================================ -->
-        <section class="card" id="imageSection">
-            <div class="card-header">
-                <h2>Изображение</h2>
-                <span class="badge">Подложка / Вступление</span>
-            </div>
-            <div class="card-body">
-                <p class="desc">Используется как вступительный сегмент и как фоновая подложка под видео.</p>
+                <p class="desc">Короткое видео (природа, город, эстетика) — создаёт «доверие» к ролику. 10 кадров якоря на весь экран в начале, затем как видео-подложка.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Изображение</label>
-                        <input type="file" name="background_image" accept="image/*">
-                    </div>
-                    <div class="form-group">
-                        <label>Длительность картинки (сек)</label>
-                        <input type="number" name="img_duration" value="0.7" min="0.3" max="2.0" step="0.1">
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- ============================================================ -->
-        <!-- Вступление (серый сегмент)                                   -->
-        <!-- ============================================================ -->
-        <section class="card" id="graySection">
-            <div class="card-header">
-                <h2>Серый сегмент</h2>
-                <span class="badge">Вступление</span>
-            </div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Длительность (сек)</label>
-                        <input type="number" name="zf_gray_duration" value="0.3" min="0.1" max="2.0" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label>Переход</label>
-                        <select name="zf_transition">
-                            <option value="fade" selected>Плавный (fade)</option>
-                            <option value="cut">Резкий (cut)</option>
+                        <label>Категория</label>
+                        <select name="anchor_category">
+                            <option value="" selected>Случайная</option>
+                            <option value="01_High_Trust_Global">High Trust (природа, эстетика)</option>
+                            <option value="02_Urban_EU">Urban EU (европейские города)</option>
+                            <option value="03_Urban_US">Urban US (американские города)</option>
+                            <option value="04_Interior_Office">Interior (офисы, кофе, ноутбуки)</option>
+                            <option value="05_POV_Walking">POV Walking (от первого лица)</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Длительность фейда (сек)</label>
-                        <input type="number" name="zf_fade_duration" value="0.2" min="0.05" max="1.0" step="0.05">
+                        <label>Кадров якоря в начале</label>
+                        <input type="number" name="anchor_head_frames" value="10" min="5" max="30">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Размытие подложки (px)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="anchor_blur" value="3" min="0" max="10" step="1"
+                                   id="anchorBlur" oninput="document.getElementById('anchorBlurVal').textContent=this.value+'px'">
+                            <span class="range-val" id="anchorBlurVal">3px</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>ISO Grain (шум)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="anchor_grain" value="3" min="0" max="10" step="1"
+                                   id="anchorGrain" oninput="document.getElementById('anchorGrainVal').textContent=this.value">
+                            <span class="range-val" id="anchorGrainVal">3</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Коррекция экспозиции (%)</label>
+                        <input type="number" name="anchor_exposure" value="1.0" min="0" max="5.0" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>Цветовой сдвиг (%)</label>
+                        <input type="number" name="anchor_color_shift" value="1.5" min="0" max="5.0" step="0.5">
+                    </div>
+                    <div class="form-group">
+                        <label>Затухание аудио якоря (сек)</label>
+                        <input type="number" name="anchor_audio_fade" value="2.5" min="0.5" max="5.0" step="0.5">
+                    </div>
+                </div>
+                <div class="form-row checkboxes">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="anchor_hflip" checked>
+                        Случайный hflip (50%)
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <!-- ============================================================ -->
+        <!-- Hook Gap (умный серый)                                        -->
+        <!-- ============================================================ -->
+        <section class="card">
+            <div class="card-header">
+                <h2>Hook Gap</h2>
+                <span class="badge">Smart Gray</span>
+            </div>
+            <div class="card-body">
+                <p class="desc">Динамический серый фон с микро-шумом + Pink Noise (комнатный тон) на минимальной громкости. Вставляется перед якорем.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Длительность (сек)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="hg_duration" value="0.4" min="0.2" max="0.8" step="0.05"
+                                   id="hgDur" oninput="document.getElementById('hgDurVal').textContent=this.value+'с'">
+                            <span class="range-val" id="hgDurVal">0.4с</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Сила шума</label>
+                        <div class="range-wrap">
+                            <input type="range" name="hg_noise" value="4" min="1" max="15" step="1"
+                                   id="hgNoise" oninput="document.getElementById('hgNoiseVal').textContent=this.value">
+                            <span class="range-val" id="hgNoiseVal">4</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Pink Noise (дБ)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="hg_pink_db" value="-40" min="-55" max="-25" step="1"
+                                   id="hgPink" oninput="document.getElementById('hgPinkVal').textContent=this.value+' дБ'">
+                            <span class="range-val" id="hgPinkVal">-40 дБ</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Crossfade (сек)</label>
+                        <input type="number" name="hg_crossfade" value="0.1" min="0" max="0.5" step="0.05">
                     </div>
                 </div>
             </div>
@@ -139,11 +165,11 @@
         <!-- ============================================================ -->
         <section class="card">
             <div class="card-header">
-                <h2>Визуальная матрёшка</h2>
-                <span class="badge">Слои</span>
+                <h2>Многослойная композиция</h2>
+                <span class="badge">Layering</span>
             </div>
             <div class="card-body">
-                <p class="desc">Подложка + масштабированное видео + шум.</p>
+                <p class="desc">Видео-подложка (якорь, размытый) + основное видео 94-97% + drop shadow + ISO grain.</p>
                 <div class="form-row">
                     <div class="form-group">
                         <label>Ширина (px)</label>
@@ -159,8 +185,8 @@
                         <label>Масштаб видео</label>
                         <div class="range-wrap">
                             <input type="range" name="mt_scale" value="0.96" min="0.90" max="0.99" step="0.01"
-                                   id="mtScale" oninput="document.getElementById('mtScaleVal').textContent=this.value">
-                            <span class="range-val" id="mtScaleVal">0.96</span>
+                                   id="mtScale" oninput="document.getElementById('mtScaleVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="mtScaleVal">96%</span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -170,7 +196,7 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Прозрачность шума</label>
+                        <label>ISO Grain (шум)</label>
                         <div class="range-wrap">
                             <input type="range" name="mt_noise" value="0.02" min="0.005" max="0.05" step="0.005"
                                    id="mtNoise" oninput="document.getElementById('mtNoiseVal').textContent=this.value">
@@ -178,55 +204,68 @@
                         </div>
                     </div>
                 </div>
+
+                <h3 style="margin-top:1.2em;margin-bottom:0.5em;font-size:0.95em;opacity:0.7">Drop Shadow (тень)</h3>
+                <p class="desc">Тонкая тень под основным видео стирает чёткую границу между слоями.</p>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Размытие тени (px)</label>
+                        <div class="range-wrap">
+                            <input type="range" name="mt_shadow_strength" value="4" min="0" max="12" step="1"
+                                   id="mtShadow" oninput="document.getElementById('mtShadowVal').textContent=this.value+'px'">
+                            <span class="range-val" id="mtShadowVal">4px</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Прозрачность тени</label>
+                        <div class="range-wrap">
+                            <input type="range" name="mt_shadow_opacity" value="0.3" min="0" max="0.8" step="0.05"
+                                   id="mtShadowOp" oninput="document.getElementById('mtShadowOpVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="mtShadowOpVal">30%</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
         <!-- ============================================================ -->
-        <!-- Мерцание                                                     -->
+        <!-- Мерцание (Soft Interleaving)                                  -->
         <!-- ============================================================ -->
-        <section class="card" id="flickerSection">
+        <section class="card">
             <div class="card-header">
-                <h2>Кадровое мерцание</h2>
-                <span class="badge">Flicker v2</span>
+                <h2>Адаптивное мерцание</h2>
+                <span class="badge">Soft Interleaving</span>
             </div>
             <div class="card-body">
-                <p class="desc">Overlay с переменной прозрачностью (sin-модуляция). Рандомизированные интервалы ломают цифровую подпись — каждое видео уникально по структуре таймлайна.</p>
+                <p class="desc">Видео/Подложка вместо Видео/Чёрный. При пропуске основное видео становится прозрачным, обнажая подложку-якорь. Рандомизированные интервалы — каждое видео уникально.</p>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Alpha чёрного (мин.)</label>
+                        <label>Прозрачность при пропуске</label>
                         <div class="range-wrap">
-                            <input type="range" name="fl_alpha_min" value="0.7" min="0.3" max="0.95" step="0.05"
-                                   id="flAlphaMin" oninput="document.getElementById('flAlphaMinVal').textContent=Math.round(this.value*100)+'%'">
-                            <span class="range-val" id="flAlphaMinVal">70%</span>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Alpha чёрного (макс.)</label>
-                        <div class="range-wrap">
-                            <input type="range" name="fl_alpha_max" value="0.9" min="0.5" max="1.0" step="0.05"
-                                   id="flAlphaMax" oninput="document.getElementById('flAlphaMaxVal').textContent=Math.round(this.value*100)+'%'">
-                            <span class="range-val" id="flAlphaMaxVal">90%</span>
+                            <input type="range" name="fl_transparency" value="0.85" min="0.50" max="0.95" step="0.05"
+                                   id="flTrans" oninput="document.getElementById('flTransVal').textContent=Math.round(this.value*100)+'%'">
+                            <span class="range-val" id="flTransVal">85%</span>
                         </div>
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Интервал между пачками (мин. сек)</label>
-                        <input type="number" name="fl_burst_int_min" value="1.8" min="0.5" max="5.0" step="0.1">
+                        <label>Интервал между пропусками (мин. сек)</label>
+                        <input type="number" name="fl_burst_int_min" value="1.5" min="0.5" max="5.0" step="0.1">
                     </div>
                     <div class="form-group">
-                        <label>Интервал между пачками (макс. сек)</label>
-                        <input type="number" name="fl_burst_int_max" value="2.4" min="0.5" max="5.0" step="0.1">
+                        <label>Интервал между пропусками (макс. сек)</label>
+                        <input type="number" name="fl_burst_int_max" value="2.5" min="0.5" max="5.0" step="0.1">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Длительность пачки (мин. кадров)</label>
+                        <label>Длительность пропуска (мин. кадров)</label>
                         <input type="number" name="fl_burst_fr_min" value="2" min="1" max="10">
                     </div>
                     <div class="form-group">
-                        <label>Длительность пачки (макс. кадров)</label>
-                        <input type="number" name="fl_burst_fr_max" value="4" min="1" max="10">
+                        <label>Длительность пропуска (макс. кадров)</label>
+                        <input type="number" name="fl_burst_fr_max" value="3" min="1" max="10">
                     </div>
                 </div>
                 <div class="form-row">
@@ -402,28 +441,6 @@ dropZone.addEventListener('drop', function(e) {
         showFile(e.dataTransfer.files[0]);
     }
 });
-
-// Показ/скрытие секций в зависимости от режима
-function updateSections() {
-    const preset = document.querySelector('input[name="preset"]:checked').value;
-    const imageSection = document.getElementById('imageSection');
-    const graySection = document.getElementById('graySection');
-    const flickerSection = document.getElementById('flickerSection');
-
-    // Показываем секции по режиму
-    const needImage = (preset === 'gray_image_flicker' || preset === 'image_video');
-    const needGray = (preset === 'gray_image_flicker' || preset === 'gray_flicker');
-    const needFlicker = (preset === 'gray_image_flicker' || preset === 'gray_flicker');
-
-    imageSection.style.display = needImage ? '' : 'none';
-    graySection.style.display = needGray ? '' : 'none';
-    flickerSection.style.display = needFlicker ? '' : 'none';
-}
-
-document.querySelectorAll('input[name="preset"]').forEach(function(radio) {
-    radio.addEventListener('change', updateSections);
-});
-updateSections();
 
 // Блокировка кнопки при отправке
 document.getElementById('mainForm').addEventListener('submit', function() {

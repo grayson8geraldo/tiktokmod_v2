@@ -49,21 +49,25 @@
         <div class="steps" id="steps">
             <div class="step" data-step="1" id="step1">
                 <div class="step-dot"></div>
-                <span>Нулевой кадр</span>
+                <span>Якорь</span>
             </div>
             <div class="step" data-step="2" id="step2">
                 <div class="step-dot"></div>
-                <span>Матрёшка</span>
+                <span>Hook Gap</span>
             </div>
             <div class="step" data-step="3" id="step3">
                 <div class="step-dot"></div>
-                <span>Мерцание</span>
+                <span>Матрёшка</span>
             </div>
             <div class="step" data-step="4" id="step4">
                 <div class="step-dot"></div>
-                <span>Аудио</span>
+                <span>Сборка</span>
             </div>
             <div class="step" data-step="5" id="step5">
+                <div class="step-dot"></div>
+                <span>Аудио</span>
+            </div>
+            <div class="step" data-step="6" id="step6">
                 <div class="step-dot"></div>
                 <span>Цифровое ДНК</span>
             </div>
@@ -107,21 +111,21 @@ function updateUI(data) {
     else if (data.status === 'done') badge.textContent = 'Готово';
     else if (data.status === 'error') badge.textContent = 'Ошибка';
 
-    // Шаги
-    const stepThresholds = [10, 25, 45, 65, 80];
-    for (let i = 0; i < 5; i++) {
+    // Шаги (6 шагов)
+    const stepThresholds = [5, 15, 25, 50, 70, 85];
+    for (let i = 0; i < 6; i++) {
         const el = document.getElementById('step' + (i + 1));
         if (data.progress >= stepThresholds[i]) {
             el.classList.add('step-active');
-            if (i + 1 < 5 && data.progress >= stepThresholds[i + 1]) {
+            if (i + 1 < 6 && data.progress >= stepThresholds[i + 1]) {
                 el.classList.add('step-done');
                 el.classList.remove('step-active');
             }
         }
     }
     if (data.progress >= 100) {
-        document.getElementById('step5').classList.add('step-done');
-        document.getElementById('step5').classList.remove('step-active');
+        document.getElementById('step6').classList.add('step-done');
+        document.getElementById('step6').classList.remove('step-active');
     }
 
     // Готово
