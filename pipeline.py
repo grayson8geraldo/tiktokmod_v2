@@ -7,10 +7,13 @@
   image_video        — картинка(0.3-1с) → подложка + видео (без мерцания)
 
 Порядок:
-  1. Вступление (zero_frame — серый/картинка сегменты)
-  2. Матрёшка (подложка + видео + шум, опционально с мерцанием внутри)
+  1. Матрёшка (подложка + видео + шум + мерцание) — на ЧИСТОЕ видео
+  2. Вступление (серый/картинка) — вставляется ПЕРЕД обработанным видео
   3. Аудио-обработка
   4. Цифровое ДНК (финал)
+
+Вступление вставляется ПОСЛЕ матрёшки, чтобы мерцание было
+ТОЛЬКО на видео, а не на серых/картиночных сегментах.
 """
 
 import logging
@@ -62,34 +65,9 @@ def run_pipeline(input_path: str, output_path: str, cfg: PipelineConfig) -> str:
     use_flicker = preset in ("gray_image_flicker", "gray_flicker")
     use_background = preset in ("gray_image_flicker", "image_video")
 
-    # --- Шаг 1: Вступление ---
-    gray_dur = 0.0
-    image_intro_dur = 0.0
-
-    if use_gray:
-        gray_dur = cfg.zero_frame.gray_duration
-    if use_image_intro and cfg.image_intro.image_path:
-        image_intro_dur = cfg.image_intro.duration
-
-    if gray_dur > 0 or image_intro_dur > 0:
-        logger.info("=" * 50)
-        logger.info("Шаг 1/4: Вступление")
-        out = next_temp("intro")
-        current = zero_frame.build_intro(
-            current, out,
-            ffmpeg=ffmpeg, ffprobe=ffprobe, temp_dir=temp,
-            gray_duration=gray_dur,
-            gray_transition=cfg.zero_frame.transition,
-            gray_fade_duration=cfg.zero_frame.fade_duration,
-            image_path=cfg.image_intro.image_path if use_image_intro else None,
-            image_duration=image_intro_dur,
-            image_transition=cfg.image_intro.transition,
-            image_fade_duration=cfg.image_intro.fade_duration,
-        )
-
-    # --- Шаг 2: Матрёшка + мерцание ---
+    # --- Шаг 1: Матрёшка + мерцание (на ЧИСТОЕ оригинальное видео) ---
     logger.info("=" * 50)
-    logger.info("Шаг 2/4: Матрёшка%s", " + мерцание" if use_flicker else "")
+    logger.info("Шаг 1/4: Матрёшка%s", " + мерцание" if use_flicker else "")
     out = next_temp("matryoshka")
 
     bg_image = None
@@ -102,6 +80,26 @@ def run_pipeline(input_path: str, output_path: str, cfg: PipelineConfig) -> str:
         background_image=bg_image,
         flicker_cfg=cfg.flicker if use_flicker else None,
     )
+
+    # --- Шаг 2: Вступление (ПОСЛЕ матрёшки, мерцание не затрагивает) ---
+    gray_dur = cfg.zero_frame.gray_duration if use_gray else 0.0
+    image_intro_dur = cfg.image_intro.duration if (use_image_intro and cfg.image_intro.image_path) else 0.0
+
+    if gray_dur > 0 or image_intro_dur > 0:
+        logger.info("=" * 50)
+        logger.info("Шаг 2/4: Вступление (серый %.1fс, картинка %.1fс)", gray_dur, image_intro_dur)
+        out = next_temp("intro")
+        current = zero_frame.build_intro(
+            current, out,
+            ffmpeg=ffmpeg, ffprobe=ffprobe, temp_dir=temp,
+            gray_duration=gray_dur,
+            gray_transition=cfg.zero_frame.transition,
+            gray_fade_duration=cfg.zero_frame.fade_duration,
+            image_path=cfg.image_intro.image_path if use_image_intro else None,
+            image_duration=image_intro_dur,
+            image_transition=cfg.image_intro.transition,
+            image_fade_duration=cfg.image_intro.fade_duration,
+        )
 
     # --- Шаг 3: Аудио ---
     if cfg.audio.enabled:
